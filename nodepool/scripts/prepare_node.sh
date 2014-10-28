@@ -57,6 +57,11 @@ sudo git clone --depth=1 $GIT_BASE/openstack-infra/system-config.git \
     /root/system-config
 sudo /bin/bash /root/system-config/install_modules.sh
 
+sudo dd of=/root/system-config/modules/openstack_project/files/pip.conf << EOF
+[global]
+index-url = http://pypi.python.org/simple
+EOF
+
 set +e
 if [ -z "$NODEPOOL_SSH_KEY" ] ; then
     sudo puppet apply --detailed-exitcodes --modulepath=/root/system-config/modules:/etc/puppet/modules \
