@@ -19,5 +19,6 @@
 
 ./convert_node_to_xenserver.sh \
     password \
-    http://downloads.vmd.citrix.com/OpenStack/xenapi-in-the-cloud-appliances/1.1.4.xva \
-    devstack
+    "$NODEPOOL_XENSERVER_XVA_URL" \
+    devstack \
+    "$NODEPOOL_XENSERVER_ISO_URL"
