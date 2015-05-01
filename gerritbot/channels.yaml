@@ -1,10 +1,30 @@
-billingstack:
+# This file is sorted alphabetically by channel name.
+akanda:
     events:
       - patchset-created
       - change-merged
       - x-vrif-minus-2
     projects:
-      - stackforge/billingstack
+      - stackforge/akanda
+      - stackforge/akanda-appliance
+      - stackforge/akanda-appliance-builder
+      - stackforge/akanda-neutron
+      - stackforge/akanda-rug
+    branches:
+      - master
+
+cerberus-project:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/cerberus
+      - stackforge/cerberus-dashboard
+      - stackforge/python-cerberusclient
+      - stackforge/sticks
+      - stackforge/sticks-dashboard
+      - stackforge/python-sticksclient
     branches:
       - master
 
@@ -26,9 +46,9 @@ congress:
       - change-merged
       - x-vrif-minus-2
     projects:
-      - stackforge/congress
-      - stackforge/python-congressclient
-      - stackforge/congress-specs
+      - openstack/congress
+      - openstack/python-congressclient
+      - openstack/congress-specs
       - stackforge/python-cloudfoundryclient
     branches:
       - master
@@ -54,29 +74,35 @@ fuel-tracker:
       - stackforge/fuel-ostf
       - stackforge/fuel-main
       - stackforge/fuel-provision
+      - stackforge/fuel-dev-tools
       - stackforge/fuel-docs
       - stackforge/fuel-library
       - stackforge/fuel-devops
       - stackforge/fuel-specs
       - stackforge/fuel-stats
       - stackforge/fuel-plugins
+      - stackforge/fuel-plugin-calico
       - stackforge/fuel-plugin-cinder-netapp
+      - stackforge/fuel-plugin-cisco-aci
       - stackforge/fuel-plugin-contrail
       - stackforge/fuel-plugin-elasticsearch-kibana
       - stackforge/fuel-plugin-external-emc
       - stackforge/fuel-plugin-external-glusterfs
       - stackforge/fuel-plugin-external-nfs
       - stackforge/fuel-plugin-external-zabbix
+      - stackforge/fuel-plugin-glance-nfs
       - stackforge/fuel-plugin-group-based-policy
       - stackforge/fuel-plugin-ha-fencing
       - stackforge/fuel-plugin-influxdb-grafana
       - stackforge/fuel-plugin-lma-collector
       - stackforge/fuel-plugin-mellanox
+      - stackforge/fuel-plugin-midonet
       - stackforge/fuel-plugin-neutron-fwaas
       - stackforge/fuel-plugin-neutron-lbaas
       - stackforge/fuel-plugin-neutron-vpnaas
+      - stackforge/fuel-plugin-nova-nfs
       - stackforge/fuel-qa
-      - stackforge/fuel-tasks-validator
+      - stackforge/fuel-tasklib
       - stackforge/python-fuelclient
     branches:
       - master
@@ -106,6 +132,16 @@ heat:
     branches:
       - master
 
+kolla:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/kolla
+    branches:
+      - master
+
 magnetodb:
     events:
       - patchset-created
@@ -118,30 +154,19 @@ magnetodb:
     branches:
       - master
 
-milk-dev:
-    events:
-      - patchset-created
-      - change-merged
-      - x-vrif-minus-2
-    projects:
-      - stackforge/milk
-    branches:
-      - master
-
 murano:
     events:
       - patchset-created
       - change-merged
       - x-vrif-minus-2
     projects:
-      - stackforge/murano
-      - stackforge/murano-agent
-      - stackforge/murano-apps
-      - stackforge/murano-dashboard
-      - stackforge/murano-deployment
-      - stackforge/murano-docs
-      - stackforge/murano-specs
-      - stackforge/python-muranoclient
+      - openstack/murano
+      - openstack/murano-agent
+      - openstack/murano-apps
+      - openstack/murano-dashboard
+      - openstack/murano-deployment
+      - openstack/murano-specs
+      - openstack/python-muranoclient
     branches:
       - master
 
@@ -162,6 +187,7 @@ openstack-ansible:
       - x-vrif-minus-2
     projects:
       - stackforge/os-ansible-deployment
+      - stackforge/os-ansible-deployment-specs
     branches:
       - master
       - icehouse
@@ -175,6 +201,16 @@ openstack-anvil:
       - x-vrif-minus-2
     projects:
       - stackforge/anvil
+    branches:
+      - master
+
+openstack-api:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - openstack/api-wg
     branches:
       - master
 
@@ -215,7 +251,7 @@ openstack-ceilometer:
       - openstack/ceilometer-specs
       - openstack/python-ceilometerclient
       - openstack/ceilometermiddleware
-      - stackforge/gnocchi
+      - openstack/gnocchi
     branches:
       - master
 
@@ -268,8 +304,21 @@ openstack-containers:
       - change-merged
       - x-vrif-minus-2
     projects:
-      - stackforge/magnum
-      - stackforge/python-magnumclient
+      - openstack/magnum
+      - openstack/python-magnumclient
+      - stackforge/heat-coe-templates
+    branches:
+      - master
+
+openstack-cue:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/cue
+      - stackforge/python-cueclient
+      - stackforge/cue-dashboard
     branches:
       - master
 
@@ -353,6 +402,31 @@ openstack-horizon:
       - openstack/horizon
       - openstack/django_openstack_auth
       - openstack/tuskar-ui
+      - openstack/manila-ui
+      - stackforge/xstatic-angular
+      - stackforge/xstatic-angular-animate
+      - stackforge/xstatic-angular-bootstrap
+      - stackforge/xstatic-angular-cookies
+      - stackforge/xstatic-angular-fileupload
+      - stackforge/xstatic-angular-lrdragndrop
+      - stackforge/xstatic-angular-mock
+      - stackforge/xstatic-angular-sanitize
+      - stackforge/xstatic-angular-smart-table
+      - stackforge/xstatic-bootstrap-datepicker
+      - stackforge/xstatic-bootstrap-scss
+      - stackforge/xstatic-d3
+      - stackforge/xstatic-font-awesome
+      - stackforge/xstatic-hogan
+      - stackforge/xstatic-jasmine
+      - stackforge/xstatic-jquery-migrate
+      - stackforge/xstatic-jquery.bootstrap.wizard
+      - stackforge/xstatic-jquery.quicksearch
+      - stackforge/xstatic-jquery.tablesorter
+      - stackforge/xstatic-jsencrypt
+      - stackforge/xstatic-magic-search
+      - stackforge/xstatic-qunit
+      - stackforge/xstatic-rickshaw
+      - stackforge/xstatic-spin
     branches:
       - master
 
@@ -363,6 +437,7 @@ openstack-hyper-v:
       - x-vrif-minus-2
     projects:
       - stackforge/networking-hyperv
+      - stackforge/compute-hyperv
     branches:
       - master
 
@@ -372,25 +447,33 @@ openstack-infra:
       - change-merged
       - x-vrif-minus-2
     projects:
+      - openstack/os-testr
       - openstack-dev/cookiecutter
       - openstack-dev/hacking
       - openstack-dev/pbr
       - openstack-dev/specs-cookiecutter
+      - openstack-dev/openstack-nose
+      - openstack-infra/activity-board
       - openstack-infra/ansible-puppet
+      - openstack-infra/ansible-build-image
       - openstack-infra/askbot-theme
+      - openstack-infra/bindep
       - openstack-infra/bugdaystats
       - openstack-infra/devstack-gate
       - openstack-infra/elastic-recheck
       - openstack-infra/gear
       - openstack-infra/gearman-plugin
       - openstack-infra/gerrit
-      - openstack-infra/gerrit-trigger-plugin
       - openstack-infra/gerritbot
       - openstack-infra/gerritlib
+      - openstack-infra/glean
       - openstack-infra/gitdm
       - openstack-infra/git-review
+      - openstack-infra/groups
+      - openstack-infra/groups-static-pages
       - openstack-infra/infra-manual
       - openstack-infra/infra-specs
+      - openstack-infra/irc-meetings
       - openstack-infra/jeepyb
       - openstack-infra/jenkins-job-builder
       - openstack-infra/lodgeit
@@ -398,6 +481,9 @@ openstack-infra:
       - openstack-infra/nodepool
       - openstack-infra/nose-html-output
       - openstack-infra/odsreg
+      - openstack-infra/openstackid
+      - openstack-infra/openstackid-resources
+      - openstack-infra/openstackweb
       - openstack-infra/os-loganalyze
       - openstack-infra/project-config
       - openstack-infra/publications
@@ -406,10 +492,12 @@ openstack-infra:
       - openstack-infra/puppet-apparmor
       - openstack-infra/puppet-askbot
       - openstack-infra/puppet-asterisk
+      - openstack-infra/puppet-bandersnatch
       - openstack-infra/puppet-bugdaystats
       - openstack-infra/puppet-bup
       - openstack-infra/puppet-cgit
       - openstack-infra/puppet-dashboard
+      - openstack-infra/puppet-diskimage_builder
       - openstack-infra/puppet-drupal
       - openstack-infra/puppet-elastic_recheck
       - openstack-infra/puppet-elasticsearch
@@ -436,11 +524,14 @@ openstack-infra:
       - openstack-infra/puppet-mysql_backup
       - openstack-infra/puppet-nodepool
       - openstack-infra/puppet-openafs
+      - openstack-infra/puppet-openstackci
       - openstack-infra/puppet-openstackid
       - openstack-infra/puppet-packagekit
+      - openstack-infra/puppet-pgsql_backup
       - openstack-infra/puppet-pip
       - openstack-infra/puppet-planet
       - openstack-infra/puppet-project_config
+      - openstack-infra/puppet-puppet
       - openstack-infra/puppet-redis
       - openstack-infra/puppet-releasestatus
       - openstack-infra/puppet-reviewday
@@ -474,8 +565,11 @@ openstack-infra:
       - openstack-infra/storyboard-webclient
       - openstack-infra/subunit2sql
       - openstack-infra/system-config
+      - openstack-infra/tripleo-ci
       - openstack-infra/vinz
       - openstack-infra/vinz-webclient
+      - openstack-infra/yaml2ical
+      - openstack-infra/zmq-event-publisher
       - openstack-infra/zuul
       - openstack-infra/zuul-packaging
       - openstack/requirements
@@ -485,9 +579,13 @@ openstack-infra:
     branches:
       - master
       - debian/sid #zuul-packaging repo
+      - feature/development #askbot-theme repo
       - feature/openid #openstackid repo
       - openstack/2.8.4 #gerrit repo
       - results #gitdm repo
+      - stable/icehouse #requirements repo
+      - stable/juno #requirements repo
+      - stable/kilo #requirements repo
       # Branches for publications repo
       - ci-automation
       - devstack-tutorial
@@ -507,9 +605,11 @@ openstack-ironic:
       - x-vrif-minus-2
     projects:
       - openstack/ironic
+      - openstack/ironic-lib
       - openstack/ironic-specs
       - openstack/ironic-python-agent
       - openstack/python-ironicclient
+      - openstack/coreos-image-builder
       - stackforge/pyghmi
       - stackforge/ironic-discoverd
       - stackforge/proliantutils
@@ -527,9 +627,10 @@ openstack-keystone:
       - openstack/keystone-specs
       - openstack/pycadf
       - openstack/python-keystoneclient
-      - openstack/python-keystoneclient-federation
       - openstack/python-keystoneclient-kerberos
+      - openstack/python-keystoneclient-saml2
       - openstack/keystonemiddleware
+      - openstack/keystoneauth
       - openstack/oslo.policy
     branches:
       - master
@@ -576,6 +677,7 @@ openstack-merges:
       - openstack/keystone
       - openstack/python-keystoneclient
       - openstack/keystonemiddleware
+      - openstack/keystoneauth
       - openstack/horizon
       - openstack/django_openstack_auth
       - openstack/tuskar-ui
@@ -636,6 +738,7 @@ openstack-merges:
       - openstack-infra/nose-html-output
       - openstack-infra/odsreg
       - openstack-infra/openstackid
+      - openstack-infra/openstackid-resources
       - openstack-infra/openstackweb
       - openstack-infra/os-loganalyze
       - openstack-infra/project-config
@@ -645,10 +748,12 @@ openstack-merges:
       - openstack-infra/puppet-apparmor
       - openstack-infra/puppet-askbot
       - openstack-infra/puppet-asterisk
+      - openstack-infra/puppet-bandersnatch
       - openstack-infra/puppet-bugdaystats
       - openstack-infra/puppet-bup
       - openstack-infra/puppet-cgit
       - openstack-infra/puppet-dashboard
+      - openstack-infra/puppet-diskimage_builder
       - openstack-infra/puppet-drupal
       - openstack-infra/puppet-elastic_recheck
       - openstack-infra/puppet-elasticsearch
@@ -675,8 +780,10 @@ openstack-merges:
       - openstack-infra/puppet-mysql_backup
       - openstack-infra/puppet-nodepool
       - openstack-infra/puppet-openafs
+      - openstack-infra/puppet-openstackci
       - openstack-infra/puppet-openstackid
       - openstack-infra/puppet-packagekit
+      - openstack-infra/puppet-pgsql_backup
       - openstack-infra/puppet-pip
       - openstack-infra/puppet-planet
       - openstack-infra/puppet-project_config
@@ -737,6 +844,7 @@ openstack-merges:
       - openstack/tuskar
       - openstack/python-tuskarclient
       - openstack-dev/devstack
+      - openstack-dev/devstack-plugin-cookiecutter
       - openstack-infra/release-tools
       - openstack/zaqar
       - openstack/python-zaqarclient
@@ -745,6 +853,7 @@ openstack-merges:
       - openstack/sahara-dashboard
       - openstack/sahara-extra
       - openstack/sahara-image-elements
+      - openstack/os-testr
 
 openstack-merlin:
     events:
@@ -776,13 +885,16 @@ openstack-monasca:
     projects:
       - stackforge/monasca-notification
       - stackforge/python-monascaclient
-      - stackforge/python-monasca-api
+      - stackforge/monasca-ceilometer
+      - stackforge/monasca-agent
       - stackforge/monasca-api
       - stackforge/monasca-thresh
       - stackforge/monasca-ui
       - stackforge/monasca-common
       - stackforge/monasca-agent
       - stackforge/monasca-persister
+      - stackforge/monasca-statsd
+      - stackforge/monasca-vagrant
     branches:
       - master
 
@@ -797,6 +909,16 @@ openstack-neutron:
       - openstack/neutron-specs
       - openstack/neutron-vpnaas
       - openstack/python-neutronclient
+    branches:
+      - master
+
+openstack-neutron-ovn:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/networking-ovn
     branches:
       - master
 
@@ -819,10 +941,10 @@ openstack-oslo:
       - change-merged
       - x-vrif-minus-2
     projects:
-      - openstack/cliff
       - openstack/debtcollector
       - openstack/oslo-incubator
       - openstack/oslo-specs
+      - openstack/oslo.cache
       - openstack/oslo.concurrency
       - openstack/oslo.config
       - openstack/oslo.context
@@ -866,10 +988,12 @@ openstack-qa:
       - change-merged
       - x-vrif-minus-2
     projects:
+      - openstack/os-testr
       - openstack/qa-specs
       - openstack/tempest
       - openstack/tempest-lib
       - openstack-dev/devstack
+      - openstack-dev/devstack-plugin-cookiecutter
       - openstack-dev/grenade
       - openstack-dev/hacking
       - openstack-infra/elastic-recheck
@@ -884,7 +1008,7 @@ openstack-rally:
       - change-merged
       - x-vrif-minus-2
     projects:
-      - stackforge/rally
+      - openstack/rally
       - stackforge/python-rallyclient
     branches:
       - master
@@ -923,12 +1047,13 @@ openstack-sdks:
       - patchset-created
       - change-merged
     projects:
+      - openstack/cliff
+      - openstack/os-client-config
       - openstack/python-openstackclient
       - stackforge/openstack-sdk-php
       - stackforge/golang-client
       - stackforge/openstack-sdk-dotnet
       - stackforge/openstack-cli-powershell
-      - stackforge/os-client-config
       - stackforge/python-openstacksdk
     branches:
       - master
@@ -968,7 +1093,21 @@ openstack-swift:
       - openstack/swift-specs
     branches:
       - master
-      - feature/ec
+      - feature/hummingbird
+      - feature/crypto
+      - stable/kilo
+      - stable/juno
+      - stable/icehouse
+
+openstack-terracotta:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/terracotta
+    branches:
+      - master
 
 openstack-trove:
     events:
@@ -1035,6 +1174,7 @@ puppet-openstack:
       - stackforge/puppet-ironic
       - stackforge/puppet-keystone
       - stackforge/puppet-manila
+      - stackforge/puppet-modulesync-configs
       - stackforge/puppet-monasca
       - stackforge/puppet-neutron
       - stackforge/puppet-nova
@@ -1053,6 +1193,7 @@ puppet-openstack:
     branches:
       - master
       - stable/icehouse
+      - stable/juno
 
 refstack:
     events:
@@ -1065,13 +1206,14 @@ refstack:
     branches:
       - master
 
-rubick:
+senlin:
     events:
       - patchset-created
       - change-merged
       - x-vrif-minus-2
     projects:
-      - stackforge/rubick
+      - stackforge/senlin
+      - stackforge/python-senlinclient
     branches:
       - master
 
@@ -1086,17 +1228,6 @@ solum:
       - stackforge/solum-dashboard
       - stackforge/solum-infra-guestagent
       - stackforge/solum-specs
-    branches:
-      - master
-
-stackforge-libra:
-    events:
-      - patchset-created
-      - change-merged
-      - x-vrif-minus-2
-    projects:
-      - stackforge/libra
-      - stackforge/python-libraclient
     branches:
       - master
 
@@ -1195,6 +1326,7 @@ tripleo:
       - openstack/os-net-config
       - openstack/os-refresh-config
       - openstack/python-tuskarclient
+      - openstack/tripleo-common
       - openstack/tripleo-heat-templates
       - openstack/tripleo-image-elements
       - openstack/tripleo-incubator
@@ -1202,10 +1334,19 @@ tripleo:
       - openstack/tripleo-specs
       - openstack/tuskar
       - openstack/tuskar-ui
-      - stackforge/kolla
       - stackforge/prep-source-repos
       - stackforge/puppet-tripleo
       - stackforge/tripleo-ansible
       - stackforge/windows-diskimage-builder
+    branches:
+      - master
+
+wsme:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/wsme
     branches:
       - master

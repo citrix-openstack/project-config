@@ -37,20 +37,22 @@ VALID_LABELS = ["acl-config", "description", "docimpact-group",
                 "groups", "homepage", "options", "project",
                 "upstream", "upstream-prefix", "use-storyboard"]
 VALID_SCHEMES = ['https://', 'http://', 'git://']
+DESCRIPTION_REQUIRED = ['openstack', 'openstack-infra', 'openstack-dev',
+                        'stackforge']
 
 found_errors = 0
 for p in projects:
     name = p.get('project')
+    repo_group = name.split('/')[0]
     if not name:
         # not a project
         found_errors += 1
         print("Error: Entry is not a project %s" % p)
         continue
     if args.verbose:
-        print 'Checking %s' % (name)
+        print('Checking %s' % name)
     description = p.get('description')
-    if (not description and
-        name.startswith(('openstack-dev/', 'stackforge/'))):
+    if not description and repo_group in DESCRIPTION_REQUIRED:
         found_errors += 1
         print("Error: Project %s has no description" % name)
         continue

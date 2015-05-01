@@ -62,40 +62,18 @@
     publishers:
       - zuul-swift-upload-console-log
 
-# This is a non-standard docs job because it uses SCP instead of FTP
-- job-template:
-    name: '{name}-ci-docs'
-    node: 'bare-precise || bare-trusty'
-
-    builders:
-      - revoke-sudo
-      - gerrit-git-prep
-      - docs
-    publishers:
-      - scp:
-          # publish to ci.openstack.org
-          site: '173.203.107.207'
-          files:
-            - target: '{target}'
-              source: 'doc/build/html/**/*'
-              keep-hierarchy: true
-      - zuul-swift-upload-console-log
-      # TODO(jhesketh): Add job for uploading built docs
-
 - job:
-    name: gate-ci-docs
+    name: gate-system-config-nodepool
     node: 'bare-precise || bare-trusty'
 
     builders:
       - revoke-sudo
       - gerrit-git-prep
-      - docs
+      - tox:
+          envlist: 'nodepool'
 
     publishers:
-      - upload-sphinx-draft
       - zuul-swift-upload-console-log
-      # TODO(jhesketh): Add job for uploading built docs
-
 
 - job:
     name: gate-project-config-projects-yaml
@@ -123,3 +101,16 @@
 
     publishers:
       - zuul-swift-upload-console-log
+
+- job:
+    name: propose-project-config-update
+    node: proposal
+
+    builders:
+      - link-logs
+      - branch-git-prep:
+          branch: master
+      - shell: ./tools/propose_projects_yaml_update.sh
+
+    publishers:
+      - console-log

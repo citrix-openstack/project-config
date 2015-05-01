@@ -25,7 +25,7 @@ def set_log_url(item, job, params):
             params['ZUUL_NEWREV'][:2], params['ZUUL_NEWREV'],
             params['ZUUL_PIPELINE'])
     else:
-        path = params['ZUUL_PIPELINE']
+        path = params['ZUUL_PIPELINE'] + '/'
     params['BASE_LOG_PATH'] = path
     params['LOG_PATH'] = path + '%s/%s/' % (job.name,
                                             params['ZUUL_UUID'][:7])
@@ -54,7 +54,7 @@ def devstack_params(item, job, params):
         params['ZUUL_NODE'] = 'devstack-precise'
     elif 'centos7' in job.name:
         params['ZUUL_NODE'] = 'devstack-centos7'
-    elif 'aiopcpu' in job.name:
+    elif 'multinode' in job.name:
         params['ZUUL_NODE'] = 'devstack-trusty-2-node'
     else:
         params['ZUUL_NODE'] = 'devstack-trusty'
@@ -88,11 +88,10 @@ def set_node_options(item, job, params, default):
     # Default to single use node. Potentially overriden below.
     # Select node to run job on.
     params['OFFLINE_NODE_WHEN_COMPLETE'] = '1'
-    proposal_re = r'^.*(merge-release-tags|(propose|upstream)-(openstack-manuals|requirements|translation)-updates?)$'  # noqa
-    pypi_re = r'^.*-(jenkinsci|mavencentral|pypi-(both|wheel))-upload$'
+    proposal_re = r'^.*(merge-release-tags|(propose|upstream)-(.*?)-updates?)$'  # noqa
+    pypi_re = r'^.*-(forge|jenkinsci|mavencentral|pypi-(both|wheel))-upload$'
     python26_re = r'^.*-(py(thon)?)?26.*$'
     centos6_re = r'^.*-centos6.*$'
-    f20_re = r'^.*-f20.*$'
     f21_re = r'^.*-f21.*$'
     tripleo_re = r'^.*-tripleo.*$'
     devstack_re = r'^.*-dsvm.*$'
@@ -106,10 +105,6 @@ def set_node_options(item, job, params, default):
         pass
     # Jobs needing centos6
     elif re.match(centos6_re, job.name):
-        # Pass because job specified label is always correct.
-        pass
-    # Jobs needing fedora 20
-    elif re.match(f20_re, job.name):
         # Pass because job specified label is always correct.
         pass
     # Jobs needing fedora 21

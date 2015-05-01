@@ -66,16 +66,15 @@ for line in aclfd:
         acl[section].append(line)
     # WTF
     else:
-        raise Exception('Unrecognized line!')
+        raise Exception('Unrecognized line: "%s"' % line)
 aclfd.close()
 
 if '2' in transformations:
-    try:
-        acl['access "refs/tags/*"'] = [
-            x for x in acl['access "refs/tags/*"']
-            if not x.startswith('create = ')]
-    except KeyError:
-        pass
+    for key in acl:
+        if key.startswith('access "refs/tags/'):
+            acl[key] = [
+                x for x in acl[key]
+                if not x.startswith('create = ')]
 
 if '3' in transformations:
     try:
@@ -117,12 +116,14 @@ if '7' in transformations:
     )
     special_teams = (
         'admins',
+        'Bootstrappers',
         'committee',
         'core',
         'maint',
         'Managers',
         'milestone',
         'packagers',
+        'release',
         'Users',
     )
     for section in acl.keys():

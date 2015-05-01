@@ -82,6 +82,11 @@ function init_manuals {
 # operations-guide) for transifex
 function setup_manuals {
     local project=$1
+
+    # Fill in associative array SPECIAL_BOOKS
+    declare -A SPECIAL_BOOKS
+    source doc-tools-check-languages.conf
+
     # Generate pot one by one
     for FILE in ${DocFolder}/*; do
         # Skip non-directories
@@ -91,10 +96,6 @@ function setup_manuals {
         DOCNAME=${FILE#${DocFolder}/}
         # Ignore directories that will not get translated
         if [[ "$DOCNAME" =~ ^(www|tools|generated|publish-docs)$ ]]; then
-            continue
-        fi
-        # Ignore directories starting with playground
-        if [[ "$DOCNAME" =~ "^playground" ]]; then
             continue
         fi
         # Skip glossary in all repos besides openstack-manuals.
@@ -113,17 +114,40 @@ function setup_manuals {
                 PERC=8
             fi
         fi
-        # Update the .pot file
-        ./tools/generatepot ${DOCNAME}
-        if [ -f ${DocFolder}/${DOCNAME}/locale/${DOCNAME}.pot ]; then
-            # Add all changed files to git
-            git add ${DocFolder}/${DOCNAME}/locale/*
+        IS_RST=0
+        if [ ${SPECIAL_BOOKS["${DOCNAME}"]+_} ] ; then
+            case "${SPECIAL_BOOKS["${DOCNAME}"]}" in
+                RST)
+                    IS_RST=1
+                    ;;
+                skip)
+                    continue
+                    ;;
+            esac
+        fi
+        if [ ${IS_RST} -eq 1 ] ; then
+            tox -e generatepot-rst -- ${DOCNAME}
+            git add ${DocFolder}/${DOCNAME}/source/locale/${DOCNAME}.pot
             # Set auto-local
             tx set --auto-local -r openstack-manuals-i18n.${DOCNAME} \
-                "${DocFolder}/${DOCNAME}/locale/<lang>.po" --source-lang en \
-                --source-file ${DocFolder}/${DOCNAME}/locale/${DOCNAME}.pot \
+                "${DocFolder}/${DOCNAME}/source/locale/<lang>/LC_MESSAGES/${DOCNAME}.po" \
+                --source-lang en \
+                --source-file ${DocFolder}/${DOCNAME}/source/locale/${DOCNAME}.pot \
                 --minimum-perc=$PERC \
                 -t PO --execute
+        else
+            # Update the .pot file
+            ./tools/generatepot ${DOCNAME}
+            if [ -f ${DocFolder}/${DOCNAME}/locale/${DOCNAME}.pot ]; then
+                # Add all changed files to git
+                git add ${DocFolder}/${DOCNAME}/locale/${DOCNAME}.pot
+                # Set auto-local
+                tx set --auto-local -r openstack-manuals-i18n.${DOCNAME} \
+                    "${DocFolder}/${DOCNAME}/locale/<lang>.po" --source-lang en \
+                    --source-file ${DocFolder}/${DOCNAME}/locale/${DOCNAME}.pot \
+                    --minimum-perc=$PERC \
+                    -t PO --execute
+            fi
         fi
     done
 
@@ -323,11 +347,11 @@ function cleanup_po_files {
 
     for i in `find $project/locale -name *.po `; do
         # Output goes to stderr, so redirect to stdout to catch it.
-        trans=`msgfmt --statistics -o /dev/null $i 2>&1`
+        trans=`msgfmt --statistics -o /dev/null "$i" 2>&1`
         check="^0 translated messages"
         if [[ $trans =~ $check ]] ; then
             # Nothing is translated, remove the file.
-            git rm -f $i
+            git rm -f "$i"
         else
             if [[ $trans =~ " translated message" ]] ; then
                 trans_no=`echo $trans|sed -e 's/ translated message.*$//'`
@@ -347,8 +371,41 @@ function cleanup_po_files {
             # For now we delete files that suddenly are less than 20
             # per cent translated.
             if [[ "$ratio" -lt "20" ]] ; then
-                git rm -f $i
+                git rm -f "$i"
             fi
         fi
+    done
+}
+
+# Reduce size of po files. This reduces the amount of content imported
+# and makes for fewer imports.
+# This does not touch the pot files. This way we can reconstruct the po files
+# using "msgmerge POTFILE POFILE -o COMPLETEPOFILE".
+function compress_po_files {
+    local directory=$1
+
+    for i in `find $directory -name *.po `; do
+        msgattrib --translated --no-location "$i" --output="${i}.tmp"
+        mv "${i}.tmp" "$i"
+    done
+}
+
+# Reduce size of po files. This reduces the amount of content imported
+# and makes for fewer imports.
+# This does not touch the pot files. This way we can reconstruct the po files
+# using "msgmerge POTFILE POFILE -o COMPLETEPOFILE".
+# Give directory name to not touch files for example under .tox.
+# Pass glossary flag to not touch the glossary.
+function compress_manual_po_files {
+    local directory=$1
+    local glossary=$2
+    for i in `find $directory -name *.po `; do
+        if [ "$glossary" -eq "0" ] ; then
+            if [[ $i =~ "/glossary/" ]] ; then
+                continue
+            fi
+        fi
+        msgattrib --translated --no-location "$i" --output="${i}.tmp"
+        mv "${i}.tmp" "$i"
     done
 }

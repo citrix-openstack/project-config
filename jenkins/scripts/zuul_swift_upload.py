@@ -21,6 +21,7 @@ credentials provided by zuul
 
 import argparse
 import logging
+import glob2
 import magic
 import os
 import Queue
@@ -31,8 +32,6 @@ import sys
 import tempfile
 import threading
 import time
-
-DEBUG = True
 
 # Map mime types to apache icons
 APACHE_MIME_ICON_MAP = {
@@ -73,7 +72,8 @@ def get_mime_icon(mime, filename=''):
     return APACHE_MIME_ICON_MAP['_default']
 
 
-def generate_log_index(folder_links, header_message=''):
+def generate_log_index(folder_links, header_message='',
+                       append_footer='index_footer.html'):
     """Create an index of logfiles and links to them"""
 
     output = '<html><head><title>Index of results</title></head><body>\n'
@@ -81,13 +81,15 @@ def generate_log_index(folder_links, header_message=''):
     output += '<table><tr><th></th><th>Name</th><th>Last Modified</th>'
     output += '<th>Size</th>'
 
+    file_details_to_append = None
     for file_details in folder_links:
         output += '<tr>'
-        output += '<img alt="[ ]" title="%(m)s" src="%(i)s"></img>' % ({
+        output += (
+            '<td><img alt="[ ]" title="%(m)s" src="%(i)s"></img></td>' % ({
             'm': file_details['metadata']['mime'],
             'i': get_mime_icon(file_details['metadata']['mime'],
                                file_details['filename']),
-        })
+            }))
         output += '<td><a href="%s">%s</a></td>' % (file_details['url'],
                                                     file_details['filename'])
         output += '<td>%s</td>' % time.asctime(
@@ -97,19 +99,37 @@ def generate_log_index(folder_links, header_message=''):
         else:
             size = sizeof_fmt(file_details['metadata']['size'], suffix='')
         output += '<td style="text-align: right">%s</td>' % size
-
         output += '</tr>\n'
 
+        if append_footer and append_footer in file_details['filename']:
+            file_details_to_append = file_details
+
     output += '</table>'
+
+    if file_details_to_append:
+        output += '<br /><hr />'
+        try:
+            with open(file_details_to_append['path'], 'r') as f:
+                output += f.read()
+        except IOError:
+            logging.exception("Error opening file for appending")
+
     output += '</body></html>\n'
     return output
 
 
 def make_index_file(folder_links, header_message='',
-                    index_filename='index.html'):
+                    index_filename='index.html',
+                    append_footer='index_footer.html'):
     """Writes an index into a file for pushing"""
-
-    index_content = generate_log_index(folder_links, header_message)
+    for file_details in folder_links:
+        # Do not generate an index file if one exists already.
+        # This may be the case when uploading other machine generated
+        # content like python coverage info.
+        if index_filename == file_details['filename']:
+            return
+    index_content = generate_log_index(folder_links, header_message,
+                                       append_footer)
     tempdir = tempfile.mkdtemp()
     fd = open(os.path.join(tempdir, index_filename), 'w')
     fd.write(index_content)
@@ -159,7 +179,8 @@ def get_folder_metadata(file_path, number_files=0):
     return metadata
 
 
-def swift_form_post_queue(file_list, url, hmac_body, signature):
+def swift_form_post_queue(file_list, url, hmac_body, signature,
+                          delete_after=None, additional_headers=None):
     """Queue up files for processing via requests to FormPost middleware"""
 
     # We are uploading the file_list as an HTTP POST multipart encoded.
@@ -179,6 +200,12 @@ def swift_form_post_queue(file_list, url, hmac_body, signature):
     except ValueError:
         raise Exception("HMAC Body contains unexpected (non-integer) data.")
 
+    headers = {}
+    if delete_after:
+        payload['x_delete_after'] = delete_after
+    if additional_headers:
+        headers.update(additional_headers)
+
     queue = Queue.Queue()
     # Zuul's log path is sometimes generated without a tailing slash. As
     # such the object prefix does not contain a slash and the files would
@@ -193,14 +220,14 @@ def swift_form_post_queue(file_list, url, hmac_body, signature):
         fileinfo = {'file01': (filename_prefix + f['relative_name'],
                                f['path'],
                                get_file_mime(f['path']))}
-        filejob = (url, payload, fileinfo)
+        filejob = (url, payload, fileinfo, headers)
         queue.put(filejob)
     return queue
 
 
 def build_file_list(file_path, logserver_prefix, swift_destination_prefix,
                     create_dir_indexes=True, create_parent_links=True,
-                    root_file_count=0):
+                    root_file_count=0, append_footer='index_footer.html'):
     """Generate a list of files to upload to zuul. Recurses through directories
        and generates index.html files if requested."""
 
@@ -264,7 +291,7 @@ def build_file_list(file_path, logserver_prefix, swift_destination_prefix,
 
                 folder_links.append(file_details)
 
-            for f in sorted(folders):
+            for f in sorted(folders, key=lambda x: x.lower()):
                 filename = os.path.basename(f) + '/'
                 full_path = os.path.join(path, filename)
                 relative_name = os.path.relpath(full_path, parent_dir)
@@ -281,7 +308,7 @@ def build_file_list(file_path, logserver_prefix, swift_destination_prefix,
 
                 folder_links.append(file_details)
 
-            for f in sorted(files):
+            for f in sorted(files, key=lambda x: x.lower()):
                 filename = os.path.basename(f)
                 full_path = os.path.join(path, filename)
                 relative_name = os.path.relpath(full_path, parent_dir)
@@ -302,20 +329,22 @@ def build_file_list(file_path, logserver_prefix, swift_destination_prefix,
                 full_path = make_index_file(
                     folder_links,
                     "Index of %s" % os.path.join(swift_destination_prefix,
-                                                 relative_path)
+                                                 relative_path),
+                    append_footer=append_footer
                 )
-                filename = os.path.basename(full_path)
-                relative_name = os.path.join(relative_path, filename)
-                url = os.path.join(destination_prefix, relative_name)
+                if full_path:
+                    filename = os.path.basename(full_path)
+                    relative_name = os.path.join(relative_path, filename)
+                    url = os.path.join(destination_prefix, relative_name)
 
-                file_details = {
-                    'filename': filename,
-                    'path': full_path,
-                    'relative_name': relative_name,
-                    'url': url,
-                }
+                    file_details = {
+                        'filename': filename,
+                        'path': full_path,
+                        'relative_name': relative_name,
+                        'url': url,
+                    }
 
-                file_list.append(file_details)
+                    file_list.append(file_details)
 
     return file_list
 
@@ -326,7 +355,7 @@ class PostThread(threading.Thread):
         super(PostThread, self).__init__()
         self.queue = queue
 
-    def _post_file(self, url, payload, fileinfo):
+    def _post_file(self, url, payload, fileinfo, headers):
         if payload['expires'] < time.time():
             raise Exception("Ran out of time uploading files!")
         files = {}
@@ -334,7 +363,18 @@ class PostThread(threading.Thread):
             files[key] = (fileinfo[key][0],
                           open(fileinfo[key][1], 'rb'),
                           fileinfo[key][2])
-        requests.post(url, data=payload, files=files)
+
+        for attempt in xrange(3):
+            try:
+                requests.post(url, headers=headers, data=payload, files=files)
+                break
+            except requests.exceptions.RequestException:
+                if attempt <= 3:
+                    logging.exception(
+                        "File posting error on attempt %d" % attempt)
+                    continue
+                else:
+                    raise
 
     def run(self):
         while True:
@@ -343,7 +383,7 @@ class PostThread(threading.Thread):
                 self._post_file(*job)
             except requests.exceptions.RequestException:
                 # Do our best to attempt to upload all the files
-                logging.exception("File posting error")
+                logging.exception("Error posting file after multiple attempts")
                 continue
             except IOError:
                 # Do our best to attempt to upload all the files
@@ -365,6 +405,14 @@ def swift_form_post(queue, num_threads):
         t.join()
 
 
+def expand_files(paths):
+    """Expand the provided paths into a list of files/folders"""
+    results = set()
+    for p in paths:
+        results.update(glob2.glob(p))
+    return sorted(results, key=lambda x: x.lower())
+
+
 def grab_args():
     """Grab and return arguments"""
     parser = argparse.ArgumentParser(
@@ -378,9 +426,20 @@ def grab_args():
                         help='do not generate a indexes inside dirs')
     parser.add_argument('--no-parent-links', action='store_true',
                         help='do not include links back to a parent dir')
+    parser.add_argument('--append-footer', default='index_footer.html',
+                        help='when generating an index, if the given file is '
+                             'present in a folder, append it to the index '
+                             '(set to "none" to disable)')
     parser.add_argument('-n', '--name', default="logs",
                         help='The instruction-set to use')
-    parser.add_argument('files', nargs='+', help='the file(s) to upload')
+    parser.add_argument('--delete-after', default='15552000',
+                        help='Number of seconds to delete object after '
+                             'upload. Default is 6 months (15552000 seconds) '
+                             'and if set to 0 X-Delete-After will not be set',
+                        type=int)
+    parser.add_argument('files', nargs='+',
+                        help='the file(s) to upload with recursive glob '
+                        'matching when supplied as a string')
 
     return parser.parse_args()
 
@@ -406,7 +465,11 @@ if __name__ == '__main__':
     destination_prefix = os.path.join(logserver_prefix,
                                       swift_destination_prefix)
 
-    for file_path in args.files:
+    append_footer = args.append_footer
+    if append_footer.lower() == 'none':
+        append_footer = None
+
+    for file_path in expand_files(args.files):
         file_path = os.path.normpath(file_path)
         if os.path.isfile(file_path):
             filename = os.path.basename(file_path)
@@ -430,34 +493,36 @@ if __name__ == '__main__':
             file_path, logserver_prefix, swift_destination_prefix,
             (not (args.no_indexes or args.no_dir_indexes)),
             (not args.no_parent_links),
-            len(args.files)
+            len(args.files),
+            append_footer=append_footer
         )
 
     index_file = ''
     if not (args.no_indexes or args.no_root_index):
         full_path = make_index_file(
             folder_links,
-            "Index of %s" % swift_destination_prefix
+            "Index of %s" % swift_destination_prefix,
+            append_footer=append_footer
         )
-        filename = os.path.basename(full_path)
-        relative_name = filename
-        url = os.path.join(destination_prefix, relative_name)
+        if full_path:
+            filename = os.path.basename(full_path)
+            relative_name = filename
+            url = os.path.join(destination_prefix, relative_name)
 
-        file_details = {
-            'filename': filename,
-            'path': full_path,
-            'relative_name': relative_name,
-            'url': url,
-        }
+            file_details = {
+                'filename': filename,
+                'path': full_path,
+                'relative_name': relative_name,
+                'url': url,
+            }
 
-        file_list.append(file_details)
+            file_list.append(file_details)
 
-    if DEBUG:
-        print "List of files prepared to upload:"
-        print file_list
+    logging.debug("List of files prepared to upload:")
+    logging.debug(file_list)
 
     queue = swift_form_post_queue(file_list, swift_url, swift_hmac_body,
-                                  swift_signature)
+                                  swift_signature, args.delete_after)
     max_file_count = int(swift_hmac_body.split('\n')[3])
     # Attempt to upload at least one item
     items_to_upload = max(queue.qsize(), 1)

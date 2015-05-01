@@ -124,7 +124,7 @@ pipelines:
     failure-message: Build failed (experimental pipeline).
     manager: IndependentPipelineManager
     source: gerrit
-    precedence: low
+    precedence: normal
     trigger:
       gerrit:
         - event: comment-added
@@ -176,7 +176,7 @@ pipelines:
       Newly uploaded patchsets enter this pipeline to receive an initial +/-1
       Verified vote from Jenkins. This is used for TripleO patchsets only so
       that if the TripleO cloud suffers a failure, folk looking can tell that
-      there isn't a system infra problem. only a TripleO specific problem.
+      there isn't a system infra problem, only a TripleO specific problem.
       Once the TripleO test cloud is multi region and has some months of
       proven stability this will be folded back into the normal check pipeline.
     success-message: Build succeeded (check-tripleo pipeline).
@@ -257,35 +257,38 @@ project-templates:
     post:
       - '{name}-branch-tarball'
 
+  - name: grenade
+    check:
+      - 'check-grenade-dsvm'
+    gate:
+      - 'gate-grenade-dsvm'
+    experimental:
+      - 'check-grenade-dsvm-neutron'
+
   - name: integrated-gate
     check:
       - 'check-tempest-dsvm-full'
       - 'check-tempest-dsvm-postgres-full'
       - 'check-tempest-dsvm-neutron'
       - 'check-tempest-dsvm-neutron-full'
-      - 'check-grenade-dsvm'
     gate:
       - 'gate-tempest-dsvm-full'
       - 'gate-tempest-dsvm-postgres-full'
       - 'gate-tempest-dsvm-neutron'
       - 'gate-tempest-dsvm-neutron-full'
-      - 'gate-grenade-dsvm'
-    experimental:
-      - 'check-grenade-dsvm-neutron'
 
   - name: integrated-gate-neutron
     check:
       - 'check-tempest-dsvm-neutron'
-      - 'check-tempest-dsvm-neutron-pg'
       - 'check-tempest-dsvm-neutron-full'
-      - 'check-tempest-dsvm-neutron-pg-full'
-      - 'gate-tempest-dsvm-neutron-large-ops'
       - 'check-grenade-dsvm-neutron'
     gate:
       - 'gate-tempest-dsvm-neutron'
-      - 'gate-tempest-dsvm-neutron-pg'
       - 'gate-tempest-dsvm-neutron-full'
-      - 'gate-tempest-dsvm-neutron-large-ops'
+    periodic-qa:
+      - 'check-tempest-dsvm-neutron-pg-full'
+    experimental:
+      - 'check-tempest-dsvm-neutron-pg-full'
 
   - name: lib-forward-testing
     check:
@@ -320,20 +323,6 @@ project-templates:
       - 'gate-{name}-pypy'
     gate:
       - 'gate-{name}-pypy'
-
-  - name: stable-compat-jobs
-    # trunk clients and libs are used in stable jobs, so run stable jobs
-    # on those repos
-    # TODO(jogo): run this on libraries
-    check:
-      - 'gate-tempest-dsvm-neutron-src-{name}-icehouse'
-      - 'gate-tempest-dsvm-neutron-src-{name}-juno'
-
-  - name: stable-compat-jobs-one-release
-    # a version of stable-compat-jobs that only looks back one release
-    # for new projects that shouldn't be tested back two releases
-    check:
-      - 'gate-tempest-dsvm-neutron-src-{name}-juno'
 
   - name: openstack-server-publish-jobs
     post:
@@ -378,6 +367,8 @@ project-templates:
 
   - name: openstack-doc-translation
     check:
+      - 'gate-{name}-tox-checklang'
+    gate:
       - 'gate-{name}-tox-checklang'
     post:
       - '{name}-manuals-upstream-translation-update'
@@ -435,7 +426,9 @@ project-templates:
       - 'gate-{name}-chef-unit'
 
   - name: chef-rake-jobs
-    experimental:
+    check:
+      - 'gate-{name}-chef-rake'
+    gate:
       - 'gate-{name}-chef-rake'
 
   # Note that we only publish integrated and incubated
@@ -477,6 +470,8 @@ project-templates:
   - name: puppet-syntax-future
     check:
       - gate-{name}-puppet-syntax-future
+    gate:
+      - gate-{name}-puppet-syntax-future
 
   - name: puppet-check-jobs
     check:
@@ -493,12 +488,14 @@ project-templates:
       # 3.5 was swiftly replaced with 3.6
       - gate-{name}-puppet-unit-3.6
       - gate-{name}-puppet-unit-3.7
+      - gate-{name}-puppet-unit-4.0
     gate:
       - gate-{name}-puppet-unit-3.3
       - gate-{name}-puppet-unit-3.4
       # 3.5 was swiftly replaced with 3.6
       - gate-{name}-puppet-unit-3.6
       - gate-{name}-puppet-unit-3.7
+      # TODO(emilienm): add 4.0 when it will vote
 
   - name: infra-puppet-apply-jobs
     check:
@@ -520,6 +517,7 @@ project-templates:
   - name: check-tripleo-puppet-jobs
     check-tripleo:
       - check-tripleo-ironic-overcloud-f20puppet-nonha
+      - check-tripleo-ironic-overcloud-f20puppet-ha
 
   - name: experimental-tripleo-jobs
     experimental-tripleo:
@@ -539,6 +537,9 @@ jobs:
   # Berkshelf 3.x requires GeCode 3.x on precise.
   - name: ^gate-.*-chef-(lint|style|unit|repo)$
     parameter-function: set_node_options_default_precise
+    branch: ^stable/(icehouse|juno)$
+  - name: ^gate-.*-chef-rake$
+    branch: ^(?!stable/(icehouse|juno)).*$
   # openstackid doesn't work with php5-mcrypt on trusty
   - name: ^.*openstackid-(unittests|release).*$
     parameter-function: set_node_options_default_precise
@@ -552,9 +553,18 @@ jobs:
   # -nv jobs are never voting.
   - name: ^.*-nv$
     voting: false
+  # because of global requirements overrides, there is no reason to
+  # run tempest/grenade tests after a requirements sync, as they've
+  # already been run in the requirements job with the override.
+  - name: ^.*(tempest|grenade)-dsvm.*$
+    skip-if:
+      - project: ^openstack/
+        all-files-match-any:
+          - ^(test-|)requirements.txt$
+
   # dsvm-neutron jobs should be conditionally skipped so they don't
   # run in response to changes that do not influence their execution.
-  - name: ^.*(tempest|grenade|rally)-dsvm-neutron.*$
+  - name: ^.*(devstack|tempest|grenade|rally|neutron-lbaas)-dsvm.*$
     skip-if:
       - project: ^openstack/neutron$
         branch: ^master$
@@ -564,6 +574,28 @@ jobs:
           - ^neutron/tests/.*$
           - ^tools/.*$
           - ^tox.ini$
+      - project: ^openstack/neutron-lbaas$
+        branch: ^master$
+        all-files-match-any:
+          - ^.*\.rst$
+          - ^doc/.*$
+          - ^neutron-lbaas/tests/unit/.*$
+          - ^tools/.*$
+          - ^tox.ini$
+      - project: ^openstack/nova$
+        branch: ^master$
+        all-files-match-any:
+          - ^.*\.rst$
+          - ^doc/.*$
+          - ^nova/tests/.*$
+          - ^tools/.*$
+          - ^tox.ini$
+      - project: ^openstack/tempest$
+        branch: ^master$
+        all-files-match-any:
+          - ^.*\.rst$
+          - ^doc/.*$
+          - ^etc/.*$
   # Skip non-doc jobs for doc-only neutron changes.  Since
   # doc/source/conf.py is checked by neutron-(pep8|pylint), those jobs
   # should not be skipped.
@@ -574,18 +606,6 @@ jobs:
         all-files-match-any:
           - ^.*\.rst$
           - ^doc/.*$
-  # dsvm-nova jobs should be conditionally skipped so they don't
-  # run in response to changes that do not influence their execution.
-  - name: ^.*(devstack|tempest|grenade)-dsvm.*$
-    skip-if:
-      - project: ^openstack/nova$
-        branch: ^master$
-        all-files-match-any:
-          - ^.*\.rst$
-          - ^doc/.*$
-          - ^nova/tests/.*$
-          - ^tools/.*$
-          - ^tox.ini$
   # Skip non-doc jobs for doc-only nova changes.  Since
   # doc/source/conf.py is checked by nova-(pep8|pylint), those jobs
   # should not be skipped.
@@ -614,14 +634,19 @@ jobs:
     branch: ^(?!stable/icehouse).*$
   - name: ^(gate|check)-tempest-dsvm-neutron-pg-full$
     branch: ^(?!stable/icehouse).*$
-    voting: false
   - name: ^(gate|check)-tempest-dsvm-neutron$
-    branch: ^(stable/).*$
+    branch: ^(stable/icehouse).*$
   - name: check-heat-dsvm-functional-mysql
     branch: ^(?!stable/(icehouse|juno)).*$
   - name: check-heat-dsvm-functional-postgres
     branch: ^(?!stable/icehouse).*$
     voting: false
+  - name: ^(gate|check)-.*-python34$
+    branch: ^(?!stable/icehouse).*$
+    # Images for Icehouse do not contain python34
+  - name: ^(gate|check)-.*-pypy$
+    branch: ^(?!stable/icehouse).*$
+    # Images for Icehouse do not contain pypy
   - name: ^(gate|check)-tempest-dsvm-cells$
     voting: false
   - name: ^(gate|check)-grenade-dsvm$
@@ -648,25 +673,29 @@ jobs:
     voting: false
   - name: check-devstack-dsvm-updown
     branch: ^(?!stable)
-  - name: check-tempest-dsvm-f20
-    voting: false
   - name: check-tempest-dsvm-f21
     branch: ^(?!stable)
     voting: false
   - name: check-tempest-dsvm-ec2api
     branch: ^(?!stable)
+    voting: false
   - name: check-functional-neutron-dsvm-ec2api
     branch: ^(?!stable)
   - name: check-functional-nova-network-dsvm-ec2api
     branch: ^(?!stable)
-  - name: gate-rally-dsvm-fakevirt-ec2-api
+  - name: gate-rally-dsvm-ec2-api-fakevirt
+    voting: false
+  - name: check-functional-dsvm-magnum
+    branch: ^(?!stable)
     voting: false
   - name: check-tempest-dsvm-centos7
     branch: ^(?!stable/icehouse).*$
     voting: false
-  - name: check-tempest-dsvm-aiopcpu-full
+  - name: check-tempest-dsvm-multinode-full
+    branch: ^(?!stable/(icehouse|juno)).*$
     voting: false
-  - name: check-tempest-dsvm-neutron-aiopcpu-full
+  - name: check-tempest-dsvm-neutron-multinode-full
+    branch: ^(?!stable/(icehouse|juno)).*$
     voting: false
   - name: ^gate-designate-dsvm-.*$
     branch: ^(?!stable/icehouse).*$
@@ -678,11 +707,15 @@ jobs:
   - name: ^(gate|check)-tempest-dsvm-networking-odl
     branch: ^(?!stable)
     voting: false
-# For Gerrit ver 2.4.x (using maven)
-  - name: ^(gate|check)-gerrit-unittests$
-    branch: ^openstack/2\.4.*$
-  - name: gerrit-package
-    branch: ^openstack/2\.4.*$
+  - name: ^(check)-tempest-dsvm-networking-ovn
+    branch: ^(?!stable)
+    voting: false
+  - name: ^check-neutron-fwaas-dsvm-functional$
+    voting: false
+  - name: ^(check|gate)-neutron-lbaas-dsvm-api$
+    branch: ^(?!stable/(?:icehouse|juno)).*$
+  - name: ^(gate|check)-group-based-policy-dsvm-functional$
+    voting: false
 # For Gerrit ver 2.8.x and later (using buck)
   - name: ^.*gerrit.*buck$
     branch: ^openstack/(?!2\.4).*$
@@ -709,9 +742,24 @@ jobs:
   - name: gate-project-config-irc-access
     files:
       - 'accessbot/channels.yaml'
+      - 'gerritbot/channels.yaml'
+  - name: check-infra-docs-index
+    files:
+      - 'docs-site/.*'
+      - 'tox.ini'
+  - name: check-generate-specs-site
+    files:
+      - 'specs/.*'
+      - 'tox.ini'
+  - name: gate-project-config-projects-yaml
+    files:
+      - 'check_valid_gerrit_projects.py'
+      - 'gerrit/projects.yaml'
+      - 'tools/check_projects_yaml_alphabetized.sh'
+      - 'tox.ini'
   - name: ^check-tripleo-.*$
     branch: ^master$
-  - name: check-tripleo-ironic-overcloud-precise-ha
+  - name: check-tripleo-ironic-overcloud-f20puppet-ha
     voting: false
 # Continous publishing from master of the following documentation targets:
   - name: ^.*manuals-upstream-translation-update$
@@ -722,7 +770,6 @@ jobs:
     success-pattern: http://docs-draft.openstack.org/{build.parameters[LOG_PATH]}/publish-docs/
   - name: ^gate-.*-tox-checklang$
     branch: master
-    voting: false
     # Only run job if at least one po or pot file was changed
     files:
       - '^.*\.po$'
@@ -742,6 +789,8 @@ jobs:
   - name: ^gate-.*-js-draft
     parameter-function: set_node_options_default_trusty
     success-pattern: http://docs-draft.openstack.org/{build.parameters[LOG_PATH]}/dist/
+  - name: ^gate-.*-npm-run-.*$
+    voting: false
   - name: infra-publications-publish
     branch: ^(?!master).*$
   - name: ^gate-.*-requirements$
@@ -756,6 +805,8 @@ jobs:
     voting: false
   - name: gate-barbican-dogtag-devstack-dsvm-f21
     voting: false
+  - name: gate-barbican-tox-bandit
+    voting: false
   - name: gate-congress-python34
     voting: false
   - name: gate-cloudkitty-dashboard-python34
@@ -764,22 +815,35 @@ jobs:
     voting: false
   - name: gate-hacking-integration-nova
     voting: false
+  - name: gate-elastic-recheck-tox-queries
+    voting: false
+  - name: gate-ironic-python34
+    voting: false
   - name: gate-sahara-pylint
     voting: false
-  - name: check-sahara-buildimages-vanilla
+  - name: gate-sahara-tox-py27-scenario-unit
+    voting: false
+  - name: ^gate-sahara-buildimages.*$
     branch: ^master$
     voting: false
+  - name: ^(gate|check)-sahara-extra-artifacts$
+    branch: ^(?!stable/(icehouse|juno|kilo)).*$
+    voting: false
+  - name: ^(gate|check)-sahara-tox-py27-scenario-unit$
+    branch: ^(?!stable/(icehouse|juno)).*$
   - name: gate-kite-python34
     voting: false
   - name: ^(gate|check)-tempest-master
     voting: false
-  - name: gate-keystone-python34
-    branch: ^(?!stable/icehouse).*$
+  - name: gate-keystone-tox-bandit
+    branch: master
     voting: false
   - name: gate-rally-dsvm-keystone
     branch: ^(?!stable/icehouse).*$
     voting: false
   - name: gate-rally-dsvm-glance
+    voting: false
+  - name: gate-python-magnumclient-tox-bandit
     voting: false
   - name: gate-requirements-pypy
     branch: ^(?!stable/icehouse).*$
@@ -791,6 +855,9 @@ jobs:
     voting: false
   - name: gate-rally-dsvm-mistral-task
     voting: false
+  - name: gate-magnum-tox-bandit
+    branch: ^(?!stable/(icehouse|juno)).*$
+    voting: false
   - name: gate-mistral-python34
     voting: false
   - name: gate-mistral-devstack-dsvm
@@ -801,13 +868,13 @@ jobs:
     voting: false
   - name: python-jenkins-coverage
     voting: false
-  - name: gate-python-barbicanclient-devstack-dsvm
-    voting: false
   - name: gate-python-mistralclient-python34
     voting: false
   - name: gate-python-muranoclient-python34
     voting: false
   - name: gate-murano-requirements
+    voting: false
+  - name: gate-murano-congress-devstack-dsvm
     voting: false
   - name: gate-murano-agent-requirements
     voting: false
@@ -817,8 +884,8 @@ jobs:
     voting: false
   - name: gate-yaql-python34
     voting: false
-  - name: gate-oslo.db-python34
-    voting: false
+  - name: gate-oslo.messaging-python34
+    branch: ^(?!stable/(?:icehouse|juno|kilo)).*$
   - name: gate-oslo.vmware-python34
     voting: false
   - name: gate-solum-infra-guestagent-python34
@@ -831,7 +898,7 @@ jobs:
     voting: false
   - name: gate-solum-python34
     voting: false
-  - name: gate-solum-devstack-dsvm-f20
+  - name: gate-solum-devstack-dsvm-centos7
     voting: false
   - name: gate-reviewstats-python34
     voting: false
@@ -847,7 +914,11 @@ jobs:
     voting: false
   - name: gate-manila-pylint
     voting: false
+  - name: gate-manila-tempest-dsvm-neutron-postgres
+    voting: false
   - name: gate-manila-tempest-dsvm-neutron-no-share-servers
+    voting: false
+  - name: gate-manila-tempest-dsvm-neutron-scenario
     voting: false
   - name: gate-blazar-devstack-dsvm
     voting: false
@@ -855,11 +926,10 @@ jobs:
     voting: false
   - name: check-tempest-dsvm-docker
     voting: false
-  - name: check-tempest-dsvm-f20-docker
+  - name: check-tempest-dsvm-docker-centos7
     voting: false
-  - name: check-neutron-dsvm-api
+  - name: ^(gate|check)-neutron-dsvm-api$
     branch: ^(?!stable/(icehouse|juno)).*$
-    voting: false
   - name: check-tempest-dsvm-neutron-dvr
     branch: ^(?!stable/icehouse).*$
     voting: false
@@ -875,6 +945,9 @@ jobs:
     branch: ^(?!stable/icehouse).*$
   - name: gate-trove-functional-dsvm-percona
     voting: false
+  - name: gate-anchor-tox-bandit
+    branch: master
+    voting: false
   # Run trove checkbuild and checklinks only for changes to files in directory
   # apidocs/ .
   - name: gate-trove-tox-doc-publish-checkbuild
@@ -884,9 +957,9 @@ jobs:
     files:
       - '^apidocs/.*$'
   - name: check-tempest-dsvm-full-ceph
-    voting: false
-  - name: check-tempest-dsvm-full-sheepdog
-    voting: false
+    branch: ^(?!stable/(icehouse|juno)).*$
+  - name: gate-tempest-dsvm-full-ceph
+    branch: ^(?!stable/(icehouse|juno)).*$
   - name: gate-tomograph-python34
     voting: false
   - name: gate-cliff-requirements
@@ -910,16 +983,15 @@ jobs:
     voting: false
   - name: ^(gate|check)-pecan-tox-ironic-stable
     voting: false
-  - name: ^(gate|check)-zaqar-python34
-    branch: ^(?!stable/icehouse).*$
   - name: gate-horizon-jshint
     branch: ^(?!stable/icehouse).*$
-  - name: gate-tempest-dsvm-ceilometer-mongodb
-    branch: ^(?!stable/icehouse).*$
-    voting: false
   - name: gate-tempest-dsvm-ceilometer-mongodb-full
     branch: ^(?!stable/icehouse).*$
     voting: false
+  - name: gate-tempest-dsvm-ceilometer-es
+    branch: ^(?!stable/(icehouse|juno)).*$
+  - name: gate-tempest-dsvm-ceilometer-es-full
+    branch: ^(?!stable/(icehouse|juno)).*$
   - name: gate-ceilometer-python34
     branch: ^master$
   - name: gate-nova-pip-missing-reqs
@@ -930,16 +1002,21 @@ jobs:
     branch: ^stable/juno$
   - name: gate-horizon-dsvm-integration
     branch: ^(?!stable/(icehouse|juno)).*$
+    voting: false
   # TODO(cschwede): Enable voting when there is enough data
   - name: check-swiftclient-dsvm-functional
     voting: false
+  # TODO(ihrachys): Enable again once the test is passing against icehouse
+  - name: ^(gate|check)-swift-dsvm-functional
+    branch: ^(?!stable/icehouse).*$
   - name: gate-kolla-bashate
     voting: false
   - name: ^(gate-)?devstack-publish-docs
     branch: ^master
-  - name: ^gate-puppet-.*-puppet-beaker-rspec$
+  # TODO(emilienm): Enable voting when all tests pass for all modules
+  - name: ^gate-puppet-.*-puppet-unit-4.0$
     voting: false
-  - name: ^gate-puppet-.*-puppet-syntax-future$
+  - name: ^gate-puppet-.*-puppet-beaker-rspec$
     voting: false
   - name: ^(gate|check)-tempest-dsvm-nova-v21-full$
     branch: ^(?!stable/(icehouse|juno)).*$
@@ -965,6 +1042,8 @@ jobs:
   - name: gate-cinder-python26
     branch: ^stable/(icehouse|juno)$
   - name: gate-designate-python26
+    branch: ^stable/(icehouse|juno)$
+  - name: gate-django_openstack_auth-python26
     branch: ^stable/(icehouse|juno)$
   - name: gate-glance-python26
     branch: ^stable/(icehouse|juno)$
@@ -1023,6 +1102,25 @@ jobs:
   - name: gate-training-guides-tox-slides
     branch: ^(?!stable/icehouse).*$
   # Training guides end
+  # os-ansible-deployment skip for rst/doc files
+  - name: ^os-ansible-deployment-(dsvm-check-commit|check-lint)$
+    skip-if:
+      - project: ^stackforge/os-ansible-deployment$
+        all-files-match-any:
+          - ^.*\.rst$
+          - ^doc/.*
+  # Keystoneclient added functional testing in Kilo
+  - name: ^(gate|check)-keystoneclient-dsvm-functional$
+    branch: ^(?!stable/(?:icehouse|juno)).*$
+  # Ceilometerclient added functional testing in master only
+  - name: ^(gate|check)-ceilometerclient-dsvm-functional$
+    branch: ^(?!stable/(?:icehouse|juno|kilo)).*$
+  # Saharaclient python 3.4 tests don't run on kilo or earlier
+  - name: ^(gate|check)-python-saharaclient-python34$
+    branch: ^(?!stable/(?:icehouse|juno|kilo)).*$
+  # Saharaclient functional test don't run on kilo or earlier
+  - name: ^(gate|check)-saharaclient-dsvm-functional$
+    branch: ^(?!stable/(?:icehouse|juno|kilo)).*$
 
 # The project list is grouped by type of project, and within each
 # group, projects are sorted (mostly) alphabetically.
@@ -1044,6 +1142,7 @@ projects:
     check:
       - gate-barbican-devstack-dsvm
       - barbican-coverage
+      - gate-barbican-tox-bandit
     gate:
       - gate-barbican-devstack-dsvm
     experimental:
@@ -1066,11 +1165,11 @@ projects:
       - name: periodic-juno
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: translation-jobs
     check:
       - check-devstack-dsvm-cells
       - check-swift-dsvm-functional
-      - gate-tempest-dsvm-ceilometer-mongodb
       - gate-tempest-dsvm-ceilometer-mongodb-full
     gate:
       - gate-devstack-dsvm-cells
@@ -1078,6 +1177,8 @@ projects:
     experimental:
       - gate-rally-dsvm-fakevirt-ceilometer
       - gate-grenade-dsvm-forward
+      - gate-tempest-dsvm-ceilometer-es
+      - gate-tempest-dsvm-ceilometer-es-full
 
   - name: openstack/ceilometer-specs
     template:
@@ -1111,14 +1212,20 @@ projects:
       - name: periodic-juno
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: translation-jobs
     check:
       - gate-cinder-pylint
       - check-devstack-dsvm-cells
       - gate-rally-dsvm-cinder
       - check-tempest-dsvm-full-ceph
+      # These jobs test open source plugins and must remain with the -nv branch
+      # designator unless cinder gives permission.
+      - check-tempest-dsvm-full-glusterfs-nv
+      - check-tempest-dsvm-full-sheepdog-nv
     gate:
       - gate-devstack-dsvm-cells
+      - gate-tempest-dsvm-full-ceph
     experimental:
       - gate-grenade-dsvm-forward
     experimental-tripleo:
@@ -1133,6 +1240,24 @@ projects:
       - gate-cinder-specs-python27
     gate:
       - gate-cinder-specs-python27
+
+  - name: openstack/congress
+    template:
+      - name: merge-check
+      - name: check-requirements
+    check:
+      - gate-congress-pep8
+      - gate-congress-python27
+      - gate-congress-python34
+    gate:
+      - gate-congress-pep8
+      - gate-congress-python27
+
+  - name: openstack/congress-specs
+    template:
+      - name: merge-check
+      - name: stackforge-specs-jobs
+
 
   - name: openstack/designate
     template:
@@ -1153,6 +1278,8 @@ projects:
       - gate-designate-dsvm-bind9
     post:
       - designate-coverage
+    experimental:
+      - gate-designate-dsvm-powerdns-postgres
 
   - name: openstack/designate-specs
     template:
@@ -1171,8 +1298,6 @@ projects:
       - name: check-requirements
     check:
       - gate-gantt-pylint
-    gate:
-      - noop
 
   - name: openstack/glance
     template:
@@ -1185,14 +1310,17 @@ projects:
       - name: periodic-juno
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: translation-jobs
       - name: large-ops
       - name: experimental-tripleo-jobs
     check:
       - check-devstack-dsvm-cells
+      - check-tempest-dsvm-full-ceph
       - gate-rally-dsvm-glance
     gate:
       - gate-devstack-dsvm-cells
+      - gate-tempest-dsvm-full-ceph
     experimental:
       - gate-grenade-dsvm-forward
 
@@ -1216,10 +1344,24 @@ projects:
       - name: publish-to-pypi
       - name: lib-forward-testing
       - name: experimental-tripleo-jobs
-    pre-release:
-      - glance_store-tarball
-    release:
-      - glance_store-tarball
+
+  - name: openstack/gnocchi
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
+      - name: openstack-server-publish-jobs
+      - name: publish-to-pypi
+    check:
+      - gate-gnocchi-bashate
+      - gate-gnocchi-dsvm-functional-file-mysql
+      - gate-gnocchi-dsvm-functional-swift-postgresql
+      - gate-gnocchi-dsvm-functional-ceph-mysql
+    gate:
+      - gate-gnocchi-bashate
+      - gate-gnocchi-dsvm-functional-file-mysql
+      - gate-gnocchi-dsvm-functional-swift-postgresql
+      - gate-gnocchi-dsvm-functional-ceph-mysql
 
   - name: openstack/heat
     template:
@@ -1231,13 +1373,14 @@ projects:
       - name: periodic-icehouse
       - name: periodic-juno
       - name: check-requirements
-      - name: integrated-gate
       - name: translation-jobs
       - name: experimental-tripleo-jobs
     check:
       - check-heat-dsvm-functional-mysql
+      - check-tempest-dsvm-heat
     gate:
       - check-heat-dsvm-functional-mysql
+      - gate-tempest-dsvm-heat
     post:
       - heat-coverage
     check-tripleo:
@@ -1250,6 +1393,10 @@ projects:
     template:
       - name: merge-check
       - name: openstack-specs-jobs
+    check:
+      - gate-heat-specs-python27
+    gate:
+      - gate-heat-specs-python27
 
   - name: openstack/heat-translator
     template:
@@ -1260,10 +1407,6 @@ projects:
       - name: openstack-server-publish-jobs
     post:
       - heat-translator-coverage
-    pre-release:
-      - heat-translator-tarball
-    release:
-      - heat-translator-tarball
 
   - name: openstack/horizon
     template:
@@ -1275,7 +1418,6 @@ projects:
       - name: periodic-icehouse
       - name: periodic-juno
       - name: check-requirements
-      - name: integrated-gate
       - name: translation-jobs
       - name: experimental-tripleo-jobs
     check:
@@ -1283,10 +1425,14 @@ projects:
       - gate-horizon-selenium
       - gate-horizon-jshint
       - gate-horizon-dsvm-integration
+      - check-tempest-dsvm-full
+      - check-grenade-dsvm
     gate:
       - gate-horizon-python27-django14
       - gate-horizon-selenium
       - gate-horizon-dsvm-integration
+      - gate-tempest-dsvm-full
+      - gate-grenade-dsvm
     post:
       - horizon-coverage
     experimental:
@@ -1308,6 +1454,7 @@ projects:
       - check-tempest-dsvm-ironic-agent_ssh
       - check-tempest-dsvm-ironic-parallel-nv
       - check-grenade-dsvm-ironic-sideways
+      - check-tempest-dsvm-ironic-pxe_ipa-nv
     post:
       - ironic-coverage
     check-tripleo:
@@ -1320,6 +1467,21 @@ projects:
     experimental:
       - check-grenade-dsvm-ironic
       - check-grenade-dsvm-partial-ironic
+      - check-tempest-dsvm-ironic-pxe_ipa-nv
+      - check-ironic-dsvm-functional
+      - gate-ironic-python34
+
+  - name: openstack/ironic-lib
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+
+    check:
+      - gate-ironic-lib-pep8
+      - gate-ironic-lib-python27
+    gate:
+      - gate-ironic-lib-pep8
+      - gate-ironic-lib-python27
 
   - name: openstack/ironic-specs
     template:
@@ -1341,12 +1503,14 @@ projects:
       - name: periodic-juno
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
       - name: translation-jobs
       - name: experimental-tripleo-jobs
     check:
       - check-swift-dsvm-functional
       - gate-rally-dsvm-keystone
+      - gate-keystone-tox-bandit
     gate:
       - gate-swift-dsvm-functional
     post:
@@ -1364,6 +1528,17 @@ projects:
     gate:
       - gate-keystone-specs-python27
 
+  - name: openstack/keystoneauth
+    template:
+      - name: merge-check
+      - name: python26-jobs
+      - name: python-jobs
+      - name: python3-jobs
+      - name: openstack-server-publish-jobs
+      - name: check-requirements
+      - name: publish-to-pypi
+      - name: lib-forward-testing
+
   - name: openstack/keystonemiddleware
     template:
       - name: merge-check
@@ -1372,7 +1547,6 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: lib-forward-testing
       - name: publish-to-pypi
     post:
@@ -1387,6 +1561,18 @@ projects:
       - name: openstack-server-release-jobs
     check:
       - gate-kite-python34
+
+  - name: openstack/magnum
+    template:
+      - name: merge-check
+      - name: python-jobs
+    check:
+      - check-functional-dsvm-magnum
+      - gate-magnum-tox-bandit
+    pre-release:
+      - magnum-tarball
+    release:
+      - magnum-tarball
 
   - name: openstack/manila
     template:
@@ -1403,12 +1589,69 @@ projects:
       - gate-manila-tempest-dsvm-neutron
       - gate-manila-tempest-dsvm-neutron-multibackend
       - gate-manila-tempest-dsvm-neutron-no-share-servers
+      - gate-manila-tempest-dsvm-neutron-postgres
+      - gate-manila-tempest-dsvm-neutron-scenario
     gate:
       - gate-manila-tox-genconfig
       - gate-manila-tempest-dsvm-neutron
       - gate-manila-tempest-dsvm-neutron-multibackend
     post:
       - manila-coverage
+
+  - name: openstack/murano
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: publish-to-pypi
+      - name: docs-on-rtfd
+    check:
+      - gate-murano-requirements
+      - gate-murano-devstack-dsvm
+      - gate-murano-congress-devstack-dsvm
+    gate:
+      - gate-murano-devstack-dsvm
+    post:
+      - murano-coverage
+
+  - name: openstack/murano-agent
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: publish-to-pypi
+    check:
+      - gate-murano-agent-requirements
+    post:
+      - murano-agent-coverage
+
+  - name: openstack/murano-apps
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: openstack/murano-dashboard
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+    check:
+      - gate-murano-dashboard-pep8
+      - gate-murano-dashboard-python27
+      - gate-murano-dashboard-requirements
+      - gate-murano-devstack-dsvm
+    gate:
+      - gate-murano-dashboard-pep8
+      - gate-murano-dashboard-python27
+      - gate-murano-devstack-dsvm
+
+  - name: openstack/murano-deployment
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: openstack/murano-specs
+    template:
+      - name: merge-check
+      - name: stackforge-specs-jobs
+      - name: docs-on-rtfd
 
   - name: openstack/neutron
     template:
@@ -1428,12 +1671,17 @@ projects:
       - check-neutron-dsvm-functional
       - gate-rally-dsvm-neutron-neutron
       - check-tempest-dsvm-neutron-dvr
+      - check-neutron-lbaas-dsvm-api
+      - check-tempest-dsvm-neutron-large-ops
     gate:
+      - gate-neutron-dsvm-api
       - gate-neutron-dsvm-functional
+      - gate-neutron-lbaas-dsvm-api
+      - gate-tempest-dsvm-neutron-large-ops
     post:
       - neutron-coverage
     experimental:
-      - check-tempest-dsvm-neutron-aiopcpu-full
+      - check-tempest-dsvm-neutron-multinode-full
       - gate-grenade-dsvm-neutron-forward
       - check-grenade-dsvm-neutron-sideways
 
@@ -1444,10 +1692,8 @@ projects:
       - name: merge-check
       - name: python-jobs
       - name: openstack-server-release-jobs
-    check:
-      - gate-neutron-fwaas-pylint
-    gate:
-      - gate-neutron-fwaas-pylint
+    experimental:
+      - check-neutron-fwaas-dsvm-functional
 
   - name: openstack/neutron-lbaas
     template:
@@ -1457,9 +1703,9 @@ projects:
       - name: python-jobs
       - name: openstack-server-release-jobs
     check:
-      - gate-neutron-lbaas-pylint
+      - check-neutron-lbaas-dsvm-api
     gate:
-      - gate-neutron-lbaas-pylint
+      - gate-neutron-lbaas-dsvm-api
 
   - name: openstack/neutron-specs
     template:
@@ -1478,11 +1724,11 @@ projects:
       - name: python-jobs
       - name: openstack-server-release-jobs
     check:
-      - gate-neutron-vpnaas-pylint
       - check-neutron-vpnaas-dsvm-functional
+      - check-neutron-vpnaas-dsvm-functional-sswan
     gate:
-      - gate-neutron-vpnaas-pylint
       - gate-neutron-vpnaas-dsvm-functional
+      - gate-neutron-vpnaas-dsvm-functional-sswan
 
   - name: openstack/nova
     template:
@@ -1495,6 +1741,7 @@ projects:
       - name: periodic-juno
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
       - name: translation-jobs
       - name: experimental-tripleo-jobs
@@ -1508,20 +1755,22 @@ projects:
       - check-tempest-dsvm-nova-v21-neutron-full
       - check-tempest-dsvm-cells
       - check-tempest-dsvm-full-ceph
+      - check-tempest-dsvm-multinode-full
     gate:
       - gate-nova-tox-functional
       - gate-devstack-dsvm-cells
       - gate-grenade-dsvm-partial-ncpu
       - gate-grenade-dsvm-ironic-sideways
       - gate-tempest-dsvm-nova-v21-full
+      - gate-tempest-dsvm-full-ceph
     post:
       - nova-coverage
     experimental:
       - gate-grenade-dsvm-forward
-      - check-tempest-dsvm-neutron-pg
       - gate-nova-pip-missing-reqs
-      - check-tempest-dsvm-aiopcpu-full
-      - check-tempest-dsvm-neutron-aiopcpu-full
+      - check-tempest-dsvm-neutron-multinode-full
+      - experimental-nova-dsvm-python27
+      - check-tempest-dsvm-f21
 
 
   - name: openstack/nova-specs
@@ -1560,6 +1809,7 @@ projects:
       - name: translation-jobs
     check:
       - gate-sahara-pylint
+      - gate-sahara-tox-py27-scenario-unit
     post:
       - sahara-coverage
 
@@ -1612,15 +1862,16 @@ projects:
       - name: periodic-icehouse
       - name: periodic-juno
       - name: check-requirements
-      - name: integrated-gate
       - name: translation-jobs
     check:
       - gate-trove-tox-checklinks
       - gate-trove-tox-doc-publish-checkbuild
       - gate-trove-functional-dsvm-mysql
+      - gate-tempest-dsvm-trove
     gate:
       - gate-trove-tox-doc-publish-checkbuild
       - gate-trove-functional-dsvm-mysql
+      - gate-tempest-dsvm-trove
     post:
       - trove-tox-doc-publishdocs
       - trove-coverage
@@ -1696,8 +1947,9 @@ projects:
       - name: openstack-client-publish-jobs
       - name: check-requirements
       - name: lib-forward-testing
-      - name: stable-compat-jobs-one-release
-    experimental:
+    check:
+      - gate-python-barbicanclient-devstack-dsvm
+    gate:
       - gate-python-barbicanclient-devstack-dsvm
 
   - name: openstack/python-ceilometerclient
@@ -1707,10 +1959,13 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: lib-forward-testing
+    check:
+      - check-ceilometerclient-dsvm-functional
+    gate:
+      - gate-ceilometerclient-dsvm-functional
     post:
       - python-ceilometerclient-coverage
 
@@ -1723,7 +1978,6 @@ projects:
       - name: openstack-client-publish-jobs
       - name: check-requirements
       - name: lib-forward-testing
-      - name: stable-compat-jobs
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: experimental-tripleo-jobs
@@ -1731,6 +1985,19 @@ projects:
       - python-cinderclient-coverage
     experimental:
       - gate-grenade-dsvm-forward
+
+  - name: openstack/python-congressclient
+    template:
+      - name: merge-check
+      - name: check-requirements
+      - name: publish-to-pypi
+    check:
+      - gate-python-congressclient-pep8
+      - gate-python-congressclient-python27
+      - gate-python-congressclient-python34
+    gate:
+      - gate-python-congressclient-pep8
+      - gate-python-congressclient-python27
 
   - name: openstack/python-designateclient
     template:
@@ -1756,6 +2023,7 @@ projects:
       - name: openstack-client-publish-jobs
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
       - name: publish-to-pypi
       - name: experimental-tripleo-jobs
@@ -1770,7 +2038,6 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs-one-release
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: lib-forward-testing
@@ -1787,7 +2054,6 @@ projects:
       - name: python26-jobs
       - name: python3-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: experimental-tripleo-jobs
@@ -1816,13 +2082,15 @@ projects:
       - name: pypy-jobs
       - name: lib-forward-testing
     check:
-      - check-tempest-dsvm-ironic-pxe_ssh
+      - check-tempest-dsvm-python-ironicclient-src
     check-tripleo:
       - check-tripleo-ironic-undercloud-precise-nonha
     gate:
-      - gate-tempest-dsvm-ironic-pxe_ssh
+      - gate-tempest-dsvm-python-ironicclient-src
     post:
       - python-ironicclient-coverage
+    experimental:
+      - check-ironicclient-dsvm-functional
 
   - name: openstack/python-keystoneclient
     template:
@@ -1832,7 +2100,6 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs-one-release
       - name: publish-to-pypi
       - name: experimental-tripleo-jobs
       - name: lib-forward-testing
@@ -1845,15 +2112,6 @@ projects:
     experimental:
       - gate-grenade-dsvm-forward
 
-  - name: openstack/python-keystoneclient-federation
-    template:
-      - name: merge-check
-      - name: python26-jobs
-      - name: python-jobs
-      - name: python3-jobs
-      - name: check-requirements
-      - name: publish-to-pypi
-
   - name: openstack/python-keystoneclient-kerberos
     template:
       - name: merge-check
@@ -1863,6 +2121,15 @@ projects:
       - name: publish-to-pypi
     experimental:
       - gate-python-keystoneclient-kerberos-python34
+
+  - name: openstack/python-keystoneclient-saml2
+    template:
+      - name: merge-check
+      - name: python26-jobs
+      - name: python-jobs
+      - name: python3-jobs
+      - name: check-requirements
+      - name: publish-to-pypi
 
   - name: openstack/python-kiteclient
     template:
@@ -1874,6 +2141,18 @@ projects:
       - name: publish-to-pypi
     post:
       - python-kiteclient-coverage
+
+  - name: openstack/python-magnumclient
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: check-requirements
+    check:
+       - gate-python-magnumclient-tox-bandit
+    pre-release:
+      - python-magnumclient-tarball
+    release:
+      - python-magnumclient-tarball
 
   - name: openstack/python-manilaclient
     template:
@@ -1891,6 +2170,18 @@ projects:
     post:
       - python-manilaclient-coverage
 
+  - name: openstack/python-muranoclient
+    template:
+      - name: merge-check
+      - name: python26-jobs
+      - name: python-jobs
+      - name: publish-to-pypi
+    check:
+      - gate-python-muranoclient-requirements
+      - gate-murano-devstack-dsvm
+    gate:
+      - gate-murano-devstack-dsvm
+
   - name: openstack/python-neutronclient
     template:
       - name: merge-check
@@ -1899,11 +2190,14 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: experimental-tripleo-jobs
       - name: lib-forward-testing
+    check:
+      - check-neutronclient-dsvm-functional
+    gate:
+      - gate-neutronclient-dsvm-functional
     post:
       - python-neutronclient-coverage
     experimental:
@@ -1917,7 +2211,6 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: experimental-tripleo-jobs
@@ -1954,15 +2247,19 @@ projects:
       - name: merge-check
       - name: python26-jobs
       - name: python-jobs
+      - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
       - name: publish-to-pypi
-      - name: stable-compat-jobs-one-release
       - name: lib-forward-testing
+    check:
+      - gate-python-saharaclient-python34
+      - check-saharaclient-dsvm-functional
+    gate:
+      - gate-saharaclient-dsvm-functional
     post:
       - python-saharaclient-coverage
     experimental:
-       - gate-python-saharaclient-python34
        - gate-python-saharaclient-pypy
 
   - name: openstack/python-swiftclient
@@ -1973,7 +2270,6 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: publish-to-pypi
       - name: pypy-jobs
       - name: experimental-tripleo-jobs
@@ -2063,6 +2359,7 @@ projects:
     template:
       - name: merge-check
       - name: python-jobs
+      - name: python26-jobs
       - name: python3-jobs
       - name: openstack-server-publish-jobs
       - name: check-requirements
@@ -2086,6 +2383,15 @@ projects:
     template:
       - name: merge-check
       - name: openstack-specs-jobs
+
+  - name: openstack/oslo.cache
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: openstack-server-publish-jobs
+      - name: check-requirements
+      - name: publish-to-pypi
+      - name: python3-jobs
 
   - name: openstack/oslo.concurrency
     template:
@@ -2129,6 +2435,7 @@ projects:
       - name: merge-check
       - name: python26-jobs
       - name: python-jobs
+      - name: python3-jobs
       - name: openstack-server-publish-jobs
       - name: check-requirements
       - name: publish-to-pypi
@@ -2139,7 +2446,6 @@ projects:
       - gate-tempest-dsvm-largeops-src-oslo.db
       - gate-oslo.db-tox-sqla_08
       - gate-oslo.db-tox-sqla_09
-      - gate-oslo.db-python34
 
   - name: openstack/oslo.i18n
     template:
@@ -2175,6 +2481,7 @@ projects:
       - name: merge-check
       - name: python26-jobs
       - name: python-jobs
+      - name: python3-jobs
       - name: openstack-server-publish-jobs
       - name: check-requirements
       - name: publish-to-pypi
@@ -2188,6 +2495,8 @@ projects:
       - gate-oslo.messaging-dsvm-functional-amqp1-f21
     experimental:
       - gate-oslo.messaging-dsvm-functional-zeromq
+    post:
+      - oslo.messaging-coverage
 
   - name: openstack/oslo.middleware
     template:
@@ -2264,6 +2573,7 @@ projects:
       - name: check-requirements
       - name: publish-to-pypi
       - name: translation-jobs
+      - name: lib-forward-testing
 
   - name: openstack/oslo.vmware
     template:
@@ -2315,6 +2625,7 @@ projects:
       - name: openstack-server-publish-jobs
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: publish-to-pypi
 
   - name: openstack/stevedore
@@ -2346,6 +2657,8 @@ projects:
       - gate-taskflow-tox-py26-sa7-mysql
       - gate-taskflow-tox-py27-sa8-mysql
       - gate-taskflow-python34
+    post:
+      - taskflow-coverage
 
   - name: openstack/tooz
     template:
@@ -2384,7 +2697,6 @@ projects:
       - gate-tooz-tox-py27-mysql
       - gate-tooz-tox-py34-mysql
     post:
-      - tooz-branch-tarball
       - tooz-coverage
 
 ########################################################################
@@ -2403,8 +2715,14 @@ projects:
   - name: openstack/castellan
     template:
       - name: merge-check
+      - name: python26-jobs
       - name: python-jobs
       - name: python3-jobs
+
+  - name: openstack/coreos-image-builder
+    template:
+      - name: merge-check
+      - name: noop-jobs
 
   - name: openstack/defcore
     template:
@@ -2416,7 +2734,6 @@ projects:
       - name: merge-check
       - name: check-requirements
       - name: publish-to-pypi
-      - name: noop-jobs
       - name: check-tripleo-jobs
     post:
       - dib-utils-branch-tarball
@@ -2432,9 +2749,10 @@ projects:
       - name: python3-jobs
       - name: check-tripleo-jobs
     check:
+      - gate-dib-dsvm-functests-devstack-trusty
+      - gate-dib-dsvm-functests-devstack-centos7
+      - gate-dib-dsvm-functests-devstack-f21
       - check-tempest-dsvm-ironic-pxe_ssh
-    check-tripleo:
-      - check-tripleo-ironic-overcloud-precise-ha
     gate:
       - gate-tempest-dsvm-ironic-pxe_ssh
 
@@ -2446,7 +2764,6 @@ projects:
       - name: python3-jobs
       - name: openstack-client-publish-jobs
       - name: check-requirements
-      - name: stable-compat-jobs
       - name: lib-forward-testing
       - name: translation-jobs
     pre-release:
@@ -2497,21 +2814,30 @@ projects:
       - gate-heat-templates-pep8
       - gate-heat-templates-python26
       - gate-heat-templates-python27
+    post:
+      - heat-templates-buildimages
 
-#TODO: add docs
   - name: openstack/ironic-python-agent
     template:
       - name: merge-check
+      - name: python-jobs
+      # Using the server jobs since it will regen on every commit, not only
+      # on release.
+      - name: openstack-server-publish-jobs
+      - name: check-requirements
     check:
-      - gate-ironic-python-agent-pep8
-      - gate-ironic-python-agent-python27
       - gate-tempest-dsvm-ironic-agent_ssh-src
+      - check-tempest-dsvm-ironic-pxe_ipa-src-nv
     gate:
-      - gate-ironic-python-agent-pep8
-      - gate-ironic-python-agent-python27
       - gate-tempest-dsvm-ironic-agent_ssh-src
     post:
       - ironic-python-agent-buildimage-coreos
+
+  - name: openstack/manila-ui
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+      - name: python-jobs
 
   - name: openstack/openstack
     template:
@@ -2553,13 +2879,21 @@ projects:
 
   - name: openstack/os-brick
     template:
+      - name: check-requirements
       - name: merge-check
-    check:
-      - gate-os-brick-pep8
-      - gate-os-brick-python27
-    gate:
-      - gate-os-brick-pep8
-      - gate-os-brick-python27
+      - name: openstack-client-publish-jobs
+      - name: publish-to-pypi
+      - name: python-jobs
+
+  - name: openstack/os-client-config
+    template:
+      - name: check-requirements
+      - name: merge-check
+      - name: openstack-client-publish-jobs
+      - name: publish-to-pypi
+      - name: python-jobs
+      - name: python3-jobs
+      - name: pypy-jobs
 
   - name: openstack/os-cloud-config
     template:
@@ -2628,6 +2962,14 @@ projects:
     post:
       - os-refresh-config-branch-tarball
 
+  - name: openstack/os-testr
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+      - name: check-requirements
+      - name: python-jobs
+      - name: openstack-server-publish-jobs
+
   - name: openstack/ossa
     template:
       - name: merge-check
@@ -2638,10 +2980,45 @@ projects:
     post:
       - static-ossa-publish
 
+  - name: openstack/rally
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python26-jobs
+      - name: python3-jobs
+      - name: check-requirements
+      - name: docs-on-rtfd
+      - name: publish-to-pypi
+    check:
+      - rally-coverage
+      - gate-rally-install-bare-centos6
+      - gate-rally-install-bare-precise
+      - gate-rally-dsvm-rally
+      - gate-rally-dsvm-neutron-rally
+      - gate-rally-dsvm-neutron-unstable
+      - gate-rally-dsvm-cli
+      - gate-rally-dsvm-verify
+      - gate-rally-tox-self
+    gate:
+      - gate-rally-install-bare-centos6
+      - gate-rally-install-bare-precise
+      - gate-rally-dsvm-rally
+      - gate-rally-dsvm-neutron-rally
+      - gate-rally-dsvm-cli
+      - gate-rally-dsvm-verify
+    post:
+      - rally-coverage
+    experimental:
+      - gate-rally-dsvm-murano-rally
+      - gate-rally-dsvm-mistral-rally
+      - gate-rally-dsvm-designate-rally
+      - gate-rally-dsvm-zaqar-rally
+
   - name: openstack/requirements
     template:
       - name: merge-check
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
       - name: pypy-jobs
       - name: experimental-tripleo-jobs
@@ -2684,6 +3061,7 @@ projects:
       - name: check-requirements
     check:
       - gate-sahara-extra-pep8
+      - check-sahara-extra-artifacts
     gate:
       - gate-sahara-extra-pep8
     post:
@@ -2701,7 +3079,12 @@ projects:
       - name: publish-to-pypi
     check:
       - gate-sahara-image-elements-pep8
-      - check-sahara-buildimages-vanilla
+      - gate-sahara-buildimages-vanilla
+      - gate-sahara-buildimages-hdp
+      - gate-sahara-buildimages-cloudera
+      - gate-sahara-buildimages-spark
+      - gate-sahara-buildimages-storm
+      - gate-sahara-buildimages-mapr
     gate:
       - gate-sahara-image-elements-pep8
     post:
@@ -2750,6 +3133,7 @@ projects:
       - name: merge-check
       - name: check-requirements
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
       - name: experimental-tripleo-jobs
     check:
@@ -2757,6 +3141,7 @@ projects:
       - gate-tempest-docs
       - gate-tempest-python27
       - check-grenade-dsvm-partial-ncpu
+      - check-grenade-dsvm-neutron
       - check-tempest-dsvm-ironic-pxe_ssh
       # juno compat jobs for tempest master
       - check-tempest-dsvm-full-juno
@@ -2768,34 +3153,40 @@ projects:
       - check-tempest-dsvm-postgres-full-icehouse
       - check-tempest-dsvm-nova-v21-full
       - check-tempest-dsvm-nova-v21-neutron-full
+      - gate-tempest-dsvm-trove
+      - check-tempest-dsvm-heat
     gate:
       - gate-tempest-pep8
       - gate-tempest-docs
       - gate-tempest-python27
       - gate-grenade-dsvm-partial-ncpu
       - gate-tempest-dsvm-nova-v21-full
+      - gate-tempest-dsvm-trove
+      - gate-tempest-dsvm-heat
     experimental:
+      - gate-tempest-python34
       - periodic-tempest-dsvm-all-master
       - periodic-tempest-dsvm-stress-master
-      - check-tempest-dsvm-aiopcpu-full
-      - check-tempest-dsvm-neutron-aiopcpu-full
+      - check-tempest-dsvm-stress-keystonev3
+      - check-tempest-dsvm-multinode-full
+      - check-tempest-dsvm-neutron-multinode-full
       - gate-grenade-dsvm-forward
       - check-tempest-dsvm-cells
       - check-tempest-dsvm-mongodb-zaqar
       - check-tempest-dsvm-redis-zaqar
       - check-tempest-dsvm-keystonev3-full
       - check-tempest-dsvm-neutron-keystonev3-full
-      - gate-tempest-dsvm-ceilometer-mongodb
       - gate-tempest-dsvm-ceilometer-mongodb-full
       - check-tempest-dsvm-full-non-isolated
       - check-tempest-dsvm-neutron-full-non-isolated
-      - check-tempest-dsvm-f20
+      - check-tempest-dsvm-neutron-full-non-admin
       - check-tempest-dsvm-ironic-parallel-nv
       - check-tempest-dsvm-neutron-dvr
       - gate-tempest-dsvm-large-ops-juno
       - gate-tempest-dsvm-neutron-large-ops-juno
       - gate-tempest-dsvm-large-ops-icehouse
       - gate-tempest-dsvm-neutron-large-ops-icehouse
+      - gate-tempest-dsvm-neutron-src-tempest-lib
     post:
       - tempest-docs
       - tempest-coverage
@@ -2816,8 +3207,11 @@ projects:
     periodic-qa:
       - periodic-tempest-dsvm-full-non-isolated-master
       - periodic-tempest-dsvm-neutron-full-non-isolated-master
+      - periodic-tempest-dsvm-neutron-full-non-admin-master
       - periodic-tempest-dsvm-all-master
       - periodic-tempest-dsvm-stress-master
+      - periodic-tempest-dsvm-keystonev3-full-master
+      - periodic-tempest-dsvm-neutron-keystonev3-full-master
 
   - name: openstack/tempest-lib
     template:
@@ -2838,10 +3232,14 @@ projects:
     post:
       - tempest-lib-docs
       - tempest-lib-branch-tarball
-    pre-release:
-      - tempest-lib-tarball
-    release:
-      - tempest-lib-tarball
+
+  - name: openstack/tripleo-common
+    template:
+      - name: merge-check
+      - name: check-requirements
+      - name: publish-to-pypi
+      - name: python-jobs
+      - name: python3-jobs
 
   - name: openstack/tripleo-heat-templates
     template:
@@ -2850,13 +3248,9 @@ projects:
       - name: noop-jobs
       - name: check-tripleo-jobs
     check-tripleo:
-      - check-tripleo-ironic-overcloud-precise-ha
+      - check-tripleo-ironic-overcloud-f20puppet-ha
     post:
       - tripleo-heat-templates-branch-tarball
-    pre-release:
-      - tripleo-heat-templates-tarball
-    release:
-      - tripleo-heat-templates-tarball
 
   - name: openstack/tripleo-image-elements
     template:
@@ -2864,8 +3258,6 @@ projects:
       - name: publish-to-pypi
       - name: noop-jobs
       - name: check-tripleo-jobs
-    check-tripleo:
-      - check-tripleo-ironic-overcloud-precise-ha
     post:
       - tripleo-image-elements-branch-tarball
 
@@ -2876,7 +3268,7 @@ projects:
     check:
       - gate-tripleo-incubator-docs
     check-tripleo:
-      - check-tripleo-ironic-overcloud-precise-ha
+      - check-tripleo-ironic-overcloud-f20puppet-ha
     gate:
       - gate-tripleo-incubator-docs
     experimental-tripleo:
@@ -2893,8 +3285,6 @@ projects:
       - name: merge-check
       - name: python-jobs
       - name: check-tripleo-puppet-jobs
-    post:
-      - tripleo-puppet-elements-branch-tarball
 
   - name: openstack/tripleo-specs
     template:
@@ -3055,6 +3445,7 @@ projects:
     template:
       - name: merge-check
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
     check:
       - gate-devstack-bashate
@@ -3068,6 +3459,7 @@ projects:
       - check-tempest-dsvm-f21
       - check-tempest-dsvm-centos7
       - gate-devstack-publish-docs
+      - check-grenade-dsvm-neutron
     gate:
       - gate-devstack-bashate
       - gate-devstack-dsvm-cells
@@ -3078,12 +3470,18 @@ projects:
     post:
       - devstack-publish-docs
     experimental:
+      - check-ironic-dsvm-functional
       - check-neutron-dsvm-functional
-      - check-tempest-dsvm-aiopcpu-full
-      - check-tempest-dsvm-neutron-aiopcpu-full
+      - check-tempest-dsvm-multinode-full
+      - check-tempest-dsvm-neutron-multinode-full
       - check-tempest-dsvm-cells
       - check-tempest-dsvm-mongodb-zaqar
       - gate-grenade-dsvm-forward
+
+  - name: openstack-dev/devstack-plugin-cookiecutter
+    template:
+      - name: merge-check
+      - name: noop-jobs
 
   - name: openstack-dev/devstack-vagrant
     template:
@@ -3167,8 +3565,12 @@ projects:
       - name: experimental-tripleo-jobs
     check:
       - check-pbr-installation-dsvm
+      - check-pbr-installation-dsvm-upstream
     gate:
       - gate-pbr-installation-dsvm
+    periodic:
+      - check-pbr-installation-dsvm
+      - check-pbr-installation-dsvm-upstream
     post:
       - pbr-coverage
     post:
@@ -3211,6 +3613,20 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
+  - name: openstack-infra/bindep
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+    check:
+      - gate-bindep-pep8
+      - gate-bindep-python27
+    gate:
+      - gate-bindep-pep8
+      - gate-bindep-python27
+    post:
+      - bindep-branch-tarball
+      - bindep-coverage
+
   - name: openstack-infra/bugdaystats
     template:
       - name: merge-check
@@ -3226,6 +3642,7 @@ projects:
     template:
       - name: merge-check
       - name: integrated-gate
+      - name: grenade
       - name: large-ops
       - name: experimental-tripleo-jobs
     check:
@@ -3235,14 +3652,15 @@ projects:
       - check-dg-tempest-dsvm-full-reexec
       - check-dg-hooks-dsvm
       - check-grenade-dsvm-partial-ncpu
+      - check-neutron-dsvm-functional-nv
       - check-swift-dsvm-functional
-      - check-tempest-dsvm-full-icehouse
-      - check-tempest-dsvm-neutron-icehouse
-      - check-tempest-dsvm-postgres-full-icehouse
-      - check-devstack-dsvm-cells-icehouse
-      - check-tempest-dsvm-full-juno
-      - check-tempest-dsvm-neutron-full-juno
-      - check-tempest-dsvm-postgres-full-juno
+      - check-tempest-dsvm-full-icehouse-nv
+      - check-tempest-dsvm-neutron-icehouse-nv
+      - check-tempest-dsvm-postgres-full-icehouse-nv
+      - check-devstack-dsvm-cells-icehouse-nv
+      - check-tempest-dsvm-full-juno-nv
+      - check-tempest-dsvm-neutron-full-juno-nv
+      - check-tempest-dsvm-postgres-full-juno-nv
       - check-tempest-dsvm-ironic-pxe_ssh
       - check-tempest-dsvm-f21
       - check-tempest-dsvm-centos7
@@ -3253,13 +3671,9 @@ projects:
       - gate-swift-dsvm-functional
     experimental:
       - gate-grenade-dsvm-forward
-      - check-tempest-dsvm-aiopcpu-full
-      - check-tempest-dsvm-neutron-aiopcpu-full
+      - check-tempest-dsvm-multinode-full
+      - check-tempest-dsvm-neutron-multinode-full
       - check-grenade-dsvm-neutron-sideways
-      - experimental-tempest-dsvm-full-dibtest
-      - experimental-tempest-dsvm-neutron-full-dibtest
-      - experimental-tempest-dsvm-full-icehouse-dibtest
-      - experimental-tempest-dsvm-neutron-icehouse-dibtest
 
   - name: openstack-infra/elastic-recheck
     template:
@@ -3268,6 +3682,7 @@ projects:
       - gate-elastic-recheck-pep8
       - gate-elastic-recheck-docs
       - gate-elastic-recheck-python27
+      - gate-elastic-recheck-tox-queries
     gate:
       - gate-elastic-recheck-pep8
       - gate-elastic-recheck-docs
@@ -3279,6 +3694,7 @@ projects:
     template:
       - name: merge-check
       - name: python-jobs
+      - name: python3-jobs
       - name: publish-to-pypi
       - name: docs-on-rtfd
 
@@ -3299,17 +3715,15 @@ projects:
     template:
       - name: merge-check
     check:
-      - check-gerrit-unittests
       - check-gerrit-buck
     gate:
-      - gate-gerrit-unittests
       - gate-gerrit-buck
     post:
-      - gerrit-package
       - gerrit-package-buck
     periodic:
       - javamelody-gerrit-plugin-stable-2.8
       - javamelody-gerrit-plugin-stable-2.9
+      - javamelody-gerrit-plugin-stable-2.10
 
   - name: openstack-infra/gerritbot
     template:
@@ -3325,11 +3739,9 @@ projects:
   - name: openstack-infra/gerritlib
     template:
       - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
       - name: publish-to-pypi
-    check:
-      - gate-gerritlib-pep8
-    gate:
-      - gate-gerritlib-pep8
 
   - name: openstack-infra/git-review
     template:
@@ -3358,6 +3770,14 @@ projects:
       - gate-gitdm
     periodic:
       - periodic-gitdm
+
+  - name: openstack-infra/glean
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+      - name: python-jobs
+      - name: python3-jobs
+      - name: infra-publish-jobs
 
   - name: openstack-infra/groups
     template:
@@ -3410,11 +3830,11 @@ projects:
       - name: python-jobs
       - name: python3-jobs
       - name: publish-to-pypi
+      - name: infra-publish-jobs
     check:
       - jenkins-job-builder-compare-xml
       - jenkins-job-builder-coverage
     post:
-      - jenkins-job-builder-ci-docs
       - jenkins-job-builder-coverage
 
   - name: openstack-infra/lodgeit
@@ -3432,8 +3852,10 @@ projects:
       - name: merge-check
       - name: python-jobs
       - name: publish-to-pypi
+      - name: infra-publish-jobs
+    check:
+      - nodepool-coverage
     post:
-      - nodepool-ci-docs
       - nodepool-coverage
 
   - name: openstack-infra/nose-html-output
@@ -3452,14 +3874,21 @@ projects:
   - name: openstack-infra/openstackid
     template:
       - name: merge-check
+      - name: infra-publish-jobs
     check:
       - gate-openstackid-unittests
+      - gate-openstackid-docs
     gate:
       - gate-openstackid-unittests
     post:
       - openstackid-release-branch
     release:
       - openstackid-release-master
+
+  - name: openstack-infra/openstackid-resources
+    template:
+      - name: merge-check
+      - name: noop-jobs
 
   - name: openstack-infra/openstackweb
     template:
@@ -3485,21 +3914,25 @@ projects:
       - project-config-gerrit
       - gate-project-config-layout
       - gate-project-config-pep8
-      - gate-project-config-bashate
       - gate-project-config-irc-access
       - gate-project-config-jenkins-project
       - gate-project-config-projects-yaml
+      - check-infra-docs-index
       - check-generate-specs-site
     gate:
+      - project-config-gerrit
       - gate-project-config-layout
       - gate-project-config-pep8
-      - gate-project-config-bashate
       - gate-project-config-irc-access
       - gate-project-config-jenkins-project
       - gate-project-config-projects-yaml
+      - check-infra-docs-index
       - check-generate-specs-site
     post:
+      - publish-infra-docs-index
       - publish-specs-site
+    periodic:
+      - propose-project-config-update
 
   - name: openstack-infra/publications
     template:
@@ -3541,6 +3974,12 @@ projects:
       - name: puppet-check-jobs
       - name: infra-puppet-apply-jobs
 
+  - name: openstack-infra/puppet-bandersnatch
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+      - name: infra-puppet-apply-jobs
+
   - name: openstack-infra/puppet-bugdaystats
     template:
       - name: merge-check
@@ -3563,6 +4002,12 @@ projects:
     template:
       - name: merge-check
       - name: noop-jobs
+
+  - name: openstack-infra/puppet-diskimage_builder
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+      - name: infra-puppet-apply-jobs
 
   - name: openstack-infra/puppet-drupal
     template:
@@ -3629,6 +4074,8 @@ projects:
       - name: merge-check
       - name: puppet-check-jobs
       - name: infra-puppet-apply-jobs
+    release:
+      - puppet-httpd-forge-upload
 
   - name: openstack-infra/puppet-iptables
     template:
@@ -3720,6 +4167,12 @@ projects:
       - name: puppet-check-jobs
       - name: infra-puppet-apply-jobs
 
+  - name: openstack-infra/puppet-openstackci
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+      - name: infra-puppet-apply-jobs
+
   - name: openstack-infra/puppet-openstackid
     template:
       - name: merge-check
@@ -3727,6 +4180,12 @@ projects:
       - name: infra-puppet-apply-jobs
 
   - name: openstack-infra/puppet-packagekit
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+      - name: infra-puppet-apply-jobs
+
+  - name: openstack-infra/puppet-pgsql_backup
     template:
       - name: merge-check
       - name: puppet-check-jobs
@@ -3745,6 +4204,12 @@ projects:
       - name: infra-puppet-apply-jobs
 
   - name: openstack-infra/puppet-project_config
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+      - name: infra-puppet-apply-jobs
+
+  - name: openstack-infra/puppet-puppet
     template:
       - name: merge-check
       - name: puppet-check-jobs
@@ -3907,9 +4372,11 @@ projects:
     check:
       - gate-release-tools-pep8
       - gate-release-tools-python27
+      - gate-release-tools-bashate
     gate:
       - gate-release-tools-pep8
       - gate-release-tools-python27
+      - gate-release-tools-bashate
 
   - name: openstack-infra/releasestatus
     template:
@@ -3940,8 +4407,14 @@ projects:
       - name: publish-to-pypi
       - name: python-jobs
       - name: python3-jobs
-    release:
-      - shade-ci-docs
+      - name: infra-publish-jobs
+    check:
+      - shade-coverage
+      - check-shade-dsvm-functional
+    gate:
+      - gate-shade-dsvm-functional
+    post:
+      - shade-coverage
 
   - name: openstack-infra/statusbot
     template:
@@ -3980,6 +4453,10 @@ projects:
     template:
       - name: merge-check
     check:
+      - gate-storyboard-webclient-npm-run-lint
+      - gate-storyboard-webclient-npm-run-test-unit
+      - gate-storyboard-webclient-npm-run-test-functional
+      - gate-storyboard-webclient-npm-run-test-integration
       - gate-storyboard-webclient-js-test-unit
       - gate-storyboard-webclient-js-test-integration
       - gate-storyboard-webclient-js-test-functional
@@ -4012,18 +4489,17 @@ projects:
     template:
       - name: merge-check
       - name: infra-puppet-apply-jobs
+      - name: infra-publish-jobs
     check:
       - gate-system-config-pep8
       - gate-system-config-bashate
       - gate-system-config-puppet-syntax
-      - gate-ci-docs
+      - gate-system-config-nodepool
     gate:
       - gate-system-config-pep8
       - gate-system-config-bashate
       - gate-system-config-puppet-syntax
-      - gate-ci-docs
-    post:
-      - system-config-ci-docs
+      - gate-system-config-nodepool
     experimental:
       - experimental-swift-logs-system-config-pep8-centos6
 
@@ -4038,12 +4514,7 @@ projects:
       - name: merge-check
       - name: publish-to-pypi
       - name: python-jobs
-    post:
-      - vinz-ci-docs
-    pre-release:
-      - vinz-ci-docs
-    release:
-      - vinz-ci-docs
+      - name: infra-publish-jobs
 
   - name: openstack-infra/vinz-webclient
     template:
@@ -4091,15 +4562,11 @@ projects:
       - name: publish-to-pypi
       - name: python26-jobs
       - name: python-jobs
+      - name: infra-publish-jobs
     check:
       - dev-zuul-coverage
     post:
-      - zuul-ci-docs
       - zuul-coverage
-    pre-release:
-      - zuul-ci-docs
-    release:
-      - zuul-ci-docs
     periodic:
       - periodic-test
 
@@ -4112,6 +4579,57 @@ projects:
 # Section: Stackforge projects
 ########################################################################
 
+  - name: stackforge/aeromancer
+    template:
+      - name: merge-check
+      - name: noop-jobs
+      - name: publish-to-pypi
+
+  - name: stackforge/akanda
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: stackforge/akanda-appliance
+    template:
+      - name: merge-check
+    check:
+      - gate-akanda-appliance-pep8
+      - gate-akanda-appliance-python27
+    gate:
+      - gate-akanda-appliance-pep8
+      - gate-akanda-appliance-python27
+
+  - name: stackforge/akanda-appliance-builder
+    template:
+      - name: merge-check
+    check:
+      - gate-akanda-appliance-builder-pep8
+      - gate-akanda-appliance-builder-python27
+    gate:
+      - gate-akanda-appliance-builder-pep8
+      - gate-akanda-appliance-builder-python27
+
+  - name: stackforge/akanda-neutron
+    template:
+      - name: merge-check
+    check:
+      - gate-akanda-neutron-pep8
+      - gate-akanda-neutron-python27
+    gate:
+      - gate-akanda-neutron-pep8
+      - gate-akanda-neutron-python27
+
+  - name: stackforge/akanda-rug
+    template:
+      - name: merge-check
+    check:
+      - gate-akanda-rug-pep8
+      - gate-akanda-rug-python27
+    gate:
+      - gate-akanda-rug-pep8
+      - gate-akanda-rug-python27
+
   - name: stackforge/anchor
     template:
       - name: merge-check
@@ -4121,6 +4639,8 @@ projects:
     gate:
       - gate-anchor-pep8
       - gate-anchor-python27
+    experimental:
+      - gate-anchor-tox-bandit
 
   - name: stackforge/anvil
     template:
@@ -4133,6 +4653,12 @@ projects:
       - gate-anvil-pep8
       - gate-anvil-python27
       - gate-anvil-pylint
+
+  - name: stackforge/apps-catalog
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
 
   - name: stackforge/aviator
     template:
@@ -4168,20 +4694,6 @@ projects:
     post:
       - billingstack-coverage
       - billingstack-branch-tarball
-
-  - name: stackforge/bindep
-    template:
-      - name: merge-check
-      - name: publish-to-pypi
-    check:
-      - gate-bindep-pep8
-      - gate-bindep-python27
-    gate:
-      - gate-bindep-pep8
-      - gate-bindep-python27
-    post:
-      - bindep-branch-tarball
-      - bindep-coverage
 
   - name: stackforge/blazar
     template:
@@ -4245,7 +4757,11 @@ projects:
     template:
       - name: merge-check
       - name: python-jobs
-      - name: python3-jobs
+
+  - name: stackforge/cerberus-dashboard
+    template:
+      - name: merge-check
+      - name: python-jobs
 
   - name: stackforge/cinder-salt-formula
     template:
@@ -4259,6 +4775,12 @@ projects:
       - gate-cl-openstack-client-run-tests
     gate:
       - gate-cl-openstack-client-run-tests
+
+  - name: stackforge/cloud-init
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
 
   - name: stackforge/cloud-pydashie
     template:
@@ -4343,6 +4865,7 @@ projects:
   - name: stackforge/compass-core
     template:
       - name: merge-check
+      - name: python26-jobs
     check:
       - gate-compass-core-pep8
       - gate-compass-core-python27
@@ -4370,22 +4893,11 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
-  - name: stackforge/congress
+  - name: stackforge/compute-hyperv
     template:
       - name: merge-check
-      - name: check-requirements
-    check:
-      - gate-congress-pep8
-      - gate-congress-python27
-      - gate-congress-python34
-    gate:
-      - gate-congress-pep8
-      - gate-congress-python27
+      - name: python-jobs
 
-  - name: stackforge/congress-specs
-    template:
-      - name: merge-check
-      - name: stackforge-specs-jobs
 
   - name: stackforge/congressmiddleware
     template:
@@ -4400,40 +4912,11 @@ projects:
       - gate-congressmiddleware-python27
       - gate-congressmiddleware-python34
 
-  - name: stackforge/cookbook-monasca-agent
-    template:
-      - name: merge-check
-      - name: chef-jobs
-
-  - name: stackforge/cookbook-monasca-api
-    template:
-      - name: merge-check
-      - name: chef-jobs
-
-  - name: stackforge/cookbook-monasca-notification
-    template:
-      - name: merge-check
-      - name: chef-jobs
-
-  - name: stackforge/cookbook-monasca-persister
-    template:
-      - name: merge-check
-      - name: chef-jobs
-
-  - name: stackforge/cookbook-monasca-schema
-    template:
-      - name: merge-check
-      - name: chef-jobs
-
-  - name: stackforge/cookbook-monasca-thresh
-    template:
-      - name: merge-check
-      - name: chef-jobs
-
   - name: stackforge/cookbook-openstack-bare-metal
     template:
       - name: merge-check
       - name: chef-jobs
+      - name: chef-rake-jobs
 
   - name: stackforge/cookbook-openstack-block-storage
     template:
@@ -4541,10 +5024,17 @@ projects:
       - name: merge-check
       - name: docs-on-rtfd
       - name: python-jobs
+    check:
+      - cue-coverage
     pre-release:
       - cue-tarball
     release:
       - cue-tarball
+
+  - name: stackforge/cue-dashboard
+    template:
+      - name: merge-check
+      - name: python-jobs
 
   - name: stackforge/designate-msdnsagent
     template:
@@ -4556,17 +5046,16 @@ projects:
       - name: merge-check
     check:
       - gate-devstack-plugin-glusterfs-bashate
+      - check-tempest-dsvm-full-glusterfs
     gate:
       - gate-devstack-plugin-glusterfs-bashate
-    experimental:
-      - gate-tempest-dsvm-full-glusterfs
 
   - name: stackforge/devstack-plugin-sheepdog
     template:
       - name: merge-check
     check:
       - gate-devstack-plugin-sheepdog-bashate
-      - check-tempest-dsvm-full-sheepdog
+      - check-tempest-dsvm-full-sheepdog-nv
     gate:
       - gate-devstack-plugin-sheepdog-bashate
 
@@ -4610,6 +5099,15 @@ projects:
       - name: publish-to-pypi
       - name: check-requirements
 
+  - name: stackforge/drbd-devstack
+    template:
+      - name: merge-check
+    check:
+      - gate-drbd-devstack-bashate
+      - check-tempest-dsvm-full-drbd-devstack
+    gate:
+      - gate-drbd-devstack-bashate
+
   - name: stackforge/driverlog
     template:
       - name: merge-check
@@ -4628,18 +5126,16 @@ projects:
 
   - name: stackforge/ec2-api
     template:
+      - name: python-jobs
       - name: merge-check
       - name: check-requirements
+      - name: publish-to-pypi
     check:
-      - gate-ec2-api-pep8
-      - gate-ec2-api-python27
       - check-tempest-dsvm-ec2api
       - check-functional-neutron-dsvm-ec2api
       - check-functional-nova-network-dsvm-ec2api
-      - gate-rally-dsvm-fakevirt-ec2-api
-    gate:
-      - gate-ec2-api-pep8
-      - gate-ec2-api-python27
+    experimental:
+      - gate-rally-dsvm-ec2-api-fakevirt
 
   - name: stackforge/ec2-driver
     template:
@@ -4659,6 +5155,17 @@ projects:
       - gate-entropy-pep8
       - gate-entropy-python27
 
+  - name: stackforge/faafo
+    template:
+      - name: merge-check
+      - name: publish-to-pypi
+    check:
+      - gate-faafo-docs
+      - gate-faafo-pep8
+    gate:
+      - gate-faafo-docs
+      - gate-faafo-pep8
+
   - name: stackforge/flame
     template:
     - name: merge-check
@@ -4677,6 +5184,11 @@ projects:
       - gate-freezer-python27
 
   - name: stackforge/fuel-astute
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: stackforge/fuel-dev-tools
     template:
       - name: merge-check
       - name: noop-jobs
@@ -4711,7 +5223,17 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
+  - name: stackforge/fuel-plugin-calico
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
   - name: stackforge/fuel-plugin-cinder-netapp
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: stackforge/fuel-plugin-cisco-aci
     template:
       - name: merge-check
       - name: noop-jobs
@@ -4746,6 +5268,11 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
+  - name: stackforge/fuel-plugin-glance-nfs
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
   - name: stackforge/fuel-plugin-group-based-policy
     template:
       - name: merge-check
@@ -4771,6 +5298,11 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
+  - name: stackforge/fuel-plugin-midonet
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
   - name: stackforge/fuel-plugin-neutron-fwaas
     template:
       - name: merge-check
@@ -4782,6 +5314,11 @@ projects:
       - name: noop-jobs
 
   - name: stackforge/fuel-plugin-neutron-vpnaas
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: stackforge/fuel-plugin-nova-nfs
     template:
       - name: merge-check
       - name: noop-jobs
@@ -4815,10 +5352,17 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
-  - name: stackforge/fuel-tasks-validator
+  - name: stackforge/fuel-tasklib
     template:
       - name: merge-check
-      - name: noop-jobs
+      - name: python26-jobs
+      - name: publish-to-pypi
+    check:
+      - gate-fuel-tasklib-pep8
+      - gate-fuel-tasklib-python27
+    gate:
+      - gate-fuel-tasklib-pep8
+      - gate-fuel-tasklib-python27
 
   - name: stackforge/fuel-web
     template:
@@ -4866,26 +5410,6 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
-  - name: stackforge/gnocchi
-    template:
-      - name: merge-check
-      - name: python-jobs
-      - name: python3-jobs
-      - name: docs-on-rtfd
-    check:
-      - gate-gnocchi-tox-py27-postgresql
-      - gate-gnocchi-tox-py27-mysql
-      - gate-gnocchi-tox-py34-postgresql
-      - gate-gnocchi-bashate
-      - gate-gnocchi-dsvm-functional-file-mysql
-      - gate-gnocchi-dsvm-functional-swift-postgresql
-      - gate-gnocchi-dsvm-functional-ceph-mysql
-    gate:
-      - gate-gnocchi-tox-py27-postgresql
-      - gate-gnocchi-tox-py27-mysql
-      - gate-gnocchi-tox-py34-postgresql
-      - gate-gnocchi-bashate
-
   - name: stackforge/golang-client
     template:
       - name: merge-check
@@ -4910,6 +5434,8 @@ projects:
       - name: merge-check
       - name: python-jobs
       - name: publish-to-pypi
+    check:
+      - check-group-based-policy-dsvm-functional
 
   - name: stackforge/group-based-policy-automation
     template:
@@ -4921,12 +5447,24 @@ projects:
     template:
       - name: merge-check
       - name: stackforge-specs-jobs
+    check:
+      - gate-group-based-policy-specs-python27
+    gate:
+      - gate-group-based-policy-specs-python27
 
   - name: stackforge/group-based-policy-ui
     template:
       - name: merge-check
       - name: python-jobs
       - name: publish-to-pypi
+
+  - name: stackforge/haos
+    template:
+      - name: merge-check
+    check:
+      - gate-haos-pep8
+    gate:
+      - gate-haos-pep8
 
   - name: stackforge/healthnmon
     template:
@@ -4937,6 +5475,14 @@ projects:
     gate:
       - gate-healthnmon-pep8
       - gate-healthnmon-python27
+
+  - name: stackforge/heat-coe-templates
+    template:
+      - name: merge-check
+    check:
+      - gate-heat-coe-templates-tox-lint
+    gate:
+      - gate-heat-coe-templates-tox-lint
 
   - name: stackforge/horizon-salt-formula
     template:
@@ -4985,8 +5531,9 @@ projects:
     check:
       - gate-kolla-bashate
       - gate-kolla-pep8
+      - check-kolla-functional-f21
     gate:
-      - noop
+      - gate-kolla-functional-f21
 
   - name: stackforge/kwapi
     template:
@@ -5050,19 +5597,17 @@ projects:
       - name: stackforge-specs-jobs
       - name: docs-on-rtfd
 
-  - name: stackforge/magnum
-    template:
-      - name: merge-check
-      - name: python-jobs
-    pre-release:
-      - magnum-tarball
-    release:
-      - magnum-tarball
-
   - name: stackforge/merlin
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-merlin-js-test-unit
+    gate:
+      - gate-merlin-js-test-unit
+    post:
+      - merlin-js-release-branch
+    release:
+      - merlin-js-release-master
 
   - name: stackforge/milk
     template:
@@ -5215,90 +5760,37 @@ projects:
       - name: merge-check
       - name: noop-jobs
 
-  - name: stackforge/murano
-    template:
-      - name: merge-check
-      - name: python-jobs
-      - name: publish-to-pypi
-      - name: docs-on-rtfd
-    check:
-      - gate-murano-requirements
-      - gate-murano-devstack-dsvm
-    gate:
-      - gate-murano-devstack-dsvm
-    post:
-      - murano-coverage
-    pre-release:
-      - murano-tarball
-    release:
-      - murano-tarball
-
-  - name: stackforge/murano-agent
-    template:
-      - name: merge-check
-      - name: python-jobs
-      - name: publish-to-pypi
-    check:
-      - gate-murano-agent-requirements
-    post:
-      - murano-agent-coverage
-    pre-release:
-      - murano-agent-tarball
-    release:
-      - murano-agent-tarball
-
-  - name: stackforge/murano-apps
-    template:
-      - name: merge-check
-      - name: noop-jobs
-
-  - name: stackforge/murano-dashboard
-    template:
-      - name: merge-check
-      - name: publish-to-pypi
-    check:
-      - gate-murano-dashboard-pep8
-      - gate-murano-dashboard-python27
-      - gate-murano-dashboard-requirements
-      - gate-murano-devstack-dsvm
-    gate:
-      - gate-murano-dashboard-pep8
-      - gate-murano-dashboard-python27
-      - gate-murano-devstack-dsvm
-    post:
-      - murano-dashboard-branch-tarball
-    pre-release:
-      - murano-dashboard-tarball
-    release:
-      - murano-dashboard-tarball
-
-  - name: stackforge/murano-deployment
-    template:
-      - name: merge-check
-      - name: noop-jobs
-
-  - name: stackforge/murano-docs
-    template:
-      - name: merge-check
-      - name: noop-jobs
-
-  - name: stackforge/murano-specs
-    template:
-      - name: merge-check
-      - name: stackforge-specs-jobs
-      - name: docs-on-rtfd
-
   - name: stackforge/namos
     template:
       - name: merge-check
       - name: noop-jobs
+
+  - name: stackforge/nerd-reviewer
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
+      - name: docs-on-rtfd
+      - name: publish-to-pypi
+    check:
+      - nerd-reviewer-coverage
 
   - name: stackforge/networking-arista
     template:
       - name: merge-check
       - name: python-jobs
 
+  - name: stackforge/networking-bagpipe-l2
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
   - name: stackforge/networking-bgpvpn
+    template:
+      - name: merge-check
+      - name: python-jobs
+
+  - name: stackforge/networking-bigswitch
     template:
       - name: merge-check
       - name: python-jobs
@@ -5320,6 +5812,11 @@ projects:
       - name: python-jobs
 
   - name: stackforge/networking-hyperv
+    template:
+      - name: merge-check
+      - name: python-jobs
+
+  - name: stackforge/networking-ibm
     template:
       - name: merge-check
       - name: python-jobs
@@ -5351,6 +5848,7 @@ projects:
     template:
       - name: merge-check
       - name: python-jobs
+      - name: publish-to-pypi
     check:
       - check-tempest-dsvm-networking-odl
     gate:
@@ -5360,11 +5858,15 @@ projects:
     template:
       - name: merge-check
       - name: python-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/networking-ovn
     template:
       - name: merge-check
       - name: python-jobs
+      - name: publish-to-pypi
+    check:
+      - check-tempest-dsvm-networking-ovn
 
   - name: stackforge/networking-ovs-dpdk
     template:
@@ -5376,10 +5878,20 @@ projects:
       - name: merge-check
       - name: python-jobs
 
+  - name: stackforge/networking-portforwarding
+    template:
+      - name: merge-check
+      - name: python-jobs
+
   - name: stackforge/networking-vsphere
     template:
       - name: merge-check
       - name: python-jobs
+
+  - name: stackforge/networking-zvm
+    template:
+      - name: merge-check
+      - name: noop-jobs
 
   - name: stackforge/neutron-powervm
     template:
@@ -5397,7 +5909,7 @@ projects:
       - name: python-jobs
     check:
       - check-tempest-dsvm-docker
-      - check-tempest-dsvm-f20-docker
+      - check-tempest-dsvm-docker-centos7
     post:
       - nova-docker-coverage
 
@@ -5415,6 +5927,11 @@ projects:
     template:
       - name: merge-check
       - name: noop-jobs
+
+  - name: stackforge/nova-zvm-virt-driver
+    template:
+      - name: merge-check
+      - name: python-jobs
 
   - name: stackforge/novaimagebuilder
     template:
@@ -5439,7 +5956,10 @@ projects:
   - name: stackforge/opencafe
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-opencafe-pep8
+    gate:
+      - noop
 
   - name: stackforge/openstack-chef-repo
     template:
@@ -5495,14 +6015,10 @@ projects:
     gate:
       - os-ansible-deployment-dsvm-check-commit
 
-  - name: stackforge/os-client-config
+  - name: stackforge/os-ansible-deployment-specs
     template:
-      - name: check-requirements
       - name: merge-check
-      - name: publish-to-pypi
-      - name: python-jobs
-      - name: python3-jobs
-      - name: pypy-jobs
+      - name: stackforge-specs-jobs
 
   - name: stackforge/osprofiler
     template:
@@ -5515,10 +6031,6 @@ projects:
       - osprofiler-coverage
     post:
       - osprofiler-coverage
-    pre-release:
-      - osprofiler-tarball
-    release:
-      - osprofiler-tarball
 
   - name: stackforge/ospurge
     template:
@@ -5625,6 +6137,11 @@ projects:
       - gate-proliantutils-pep8
       - gate-proliantutils-python27
 
+  - name: stackforge/puppet-autossh
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+
   - name: stackforge/puppet-ceilometer
     template:
       - name: merge-check
@@ -5632,6 +6149,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-ceph
     template:
@@ -5648,6 +6167,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-designate
     template:
@@ -5664,6 +6185,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-gnocchi
     template:
@@ -5680,6 +6203,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-horizon
     template:
@@ -5704,6 +6229,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-manila
     template:
@@ -5712,6 +6239,11 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+
+  - name: stackforge/puppet-modulesync-configs
+    template:
+      - name: merge-check
+      - name: noop-jobs
 
   - name: stackforge/puppet-monasca
     template:
@@ -5744,6 +6276,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-nova
     template:
@@ -5752,6 +6286,13 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
+
+  - name: stackforge/puppet-nslcd
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
 
   - name: stackforge/puppet-openstack
     template:
@@ -5796,6 +6337,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-sahara
     template:
@@ -5805,6 +6348,11 @@ projects:
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
 
+  - name: stackforge/puppet-setproxy
+    template:
+      - name: merge-check
+      - name: puppet-check-jobs
+
   - name: stackforge/puppet-swift
     template:
       - name: merge-check
@@ -5812,6 +6360,8 @@ projects:
       - name: puppet-module-unit-jobs
       - name: puppet-beaker-jobs
       - name: puppet-syntax-future
+    check-tripleo:
+      - check-tripleo-ironic-overcloud-f20puppet-nonha
 
   - name: stackforge/puppet-tempest
     template:
@@ -5881,6 +6431,11 @@ projects:
     release:
       - python-blazarclient-tarball
 
+  - name: stackforge/python-cerberusclient
+    template:
+      - name: merge-check
+      - name: python-jobs
+
   - name: stackforge/python-cloudfoundryclient
     template:
       - name: merge-check
@@ -5903,19 +6458,6 @@ projects:
     post:
       - python-cloudkittyclient-coverage
 
-  - name: stackforge/python-congressclient
-    template:
-      - name: merge-check
-      - name: check-requirements
-      - name: publish-to-pypi
-    check:
-      - gate-python-congressclient-pep8
-      - gate-python-congressclient-python27
-      - gate-python-congressclient-python34
-    gate:
-      - gate-python-congressclient-pep8
-      - gate-python-congressclient-python27
-
   - name: stackforge/python-cueclient
     template:
       - name: merge-check
@@ -5923,10 +6465,6 @@ projects:
       - name: python-jobs
       - name: publish-to-pypi
       - name: docs-on-rtfd
-    pre-release:
-      - python-cueclient-tarball
-    release:
-      - python-cueclient-tarball
 
   - name: stackforge/python-fuelclient
     template:
@@ -5981,16 +6519,6 @@ projects:
     release:
       - python-magnetodbclient-tarball
 
-  - name: stackforge/python-magnumclient
-    template:
-      - name: merge-check
-      - name: python-jobs
-      - name: check-requirements
-    pre-release:
-      - python-magnumclient-tarball
-    release:
-      - python-magnumclient-tarball
-
   - name: stackforge/python-mistralclient
     template:
       - name: merge-check
@@ -6012,20 +6540,6 @@ projects:
       - gate-python-monascaclient-python27
     post:
       - python-monascaclient-coverage
-
-  - name: stackforge/python-muranoclient
-    template:
-      - name: merge-check
-      - name: python26-jobs
-      - name: python-jobs
-      - name: publish-to-pypi
-    check:
-      - gate-python-muranoclient-requirements
-      - gate-murano-devstack-dsvm
-    gate:
-      - gate-murano-devstack-dsvm
-    post:
-      - python-muranoclient-branch-tarball
 
   - name: stackforge/python-openstacksdk
     template:
@@ -6052,7 +6566,15 @@ projects:
   - name: stackforge/python-rackclient
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - python-rackclient-coverage
+      - gate-python-rackclient-pep8
+      - gate-python-rackclient-python27
+    gate:
+      - gate-python-rackclient-pep8
+      - gate-python-rackclient-python27
+    post:
+      - python-rackclient-coverage
 
   - name: stackforge/python-rallyclient
     template:
@@ -6065,6 +6587,14 @@ projects:
     post:
       - python-rallyclient-coverage
 
+  - name: stackforge/python-senlinclient
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
+      - name: check-requirements
+      - name: publish-to-pypi
+
   - name: stackforge/python-solumclient
     template:
       - name: merge-check
@@ -6075,6 +6605,11 @@ projects:
       - name: pypy-jobs
     post:
       - python-solumclient-coverage
+
+  - name: stackforge/python-sticksclient
+    template:
+      - name: merge-check
+      - name: python-jobs
 
   - name: stackforge/python-surveilclient
     template:
@@ -6115,41 +6650,6 @@ projects:
     template:
       - name: merge-check
       - name: noop-jobs
-
-  - name: stackforge/rally
-    template:
-      - name: merge-check
-      - name: python-jobs
-      - name: python26-jobs
-      - name: check-requirements
-      - name: docs-on-rtfd
-      - name: publish-to-pypi
-    check:
-      - rally-coverage
-      - gate-rally-python34
-      - gate-rally-install-bare-centos6
-      - gate-rally-install-bare-precise
-      - gate-rally-dsvm-rally
-      - gate-rally-dsvm-neutron-rally
-      - gate-rally-dsvm-neutron-unstable
-      - gate-rally-dsvm-cli
-      - gate-rally-dsvm-verify
-      - gate-rally-tox-self
-    gate:
-      - gate-rally-python34
-      - gate-rally-install-bare-centos6
-      - gate-rally-install-bare-precise
-      - gate-rally-dsvm-rally
-      - gate-rally-dsvm-neutron-rally
-      - gate-rally-dsvm-cli
-      - gate-rally-dsvm-verify
-    post:
-      - rally-coverage
-    experimental:
-      - gate-rally-dsvm-murano-rally
-      - gate-rally-dsvm-mistral-rally
-      - gate-rally-dsvm-designate-rally
-      - gate-rally-dsvm-zaqar-rally
 
   - name: stackforge/refstack
     template:
@@ -6232,6 +6732,14 @@ projects:
     post:
       - satori-coverage
 
+  - name: stackforge/senlin
+    template:
+      - name: merge-check
+      - name: python-jobs
+      - name: python3-jobs
+      - name: check-requirements
+      - name: publish-to-pypi
+
   - name: stackforge/shaker
     template:
       - name: merge-check
@@ -6252,7 +6760,7 @@ projects:
     check:
       - gate-solum-python34
       - gate-solum-devstack-dsvm
-      - gate-solum-devstack-dsvm-f20
+      - gate-solum-devstack-dsvm-centos7
     gate:
       - gate-solum-devstack-dsvm
     post:
@@ -6350,12 +6858,22 @@ projects:
   - name: stackforge/stacktach-klugman
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-notification-utils
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-notigen
     template:
@@ -6365,12 +6883,22 @@ projects:
   - name: stackforge/stacktach-quince
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-quincy
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-sandbox
     template:
@@ -6380,27 +6908,62 @@ projects:
   - name: stackforge/stacktach-shoebox
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-simport
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-stackdistiller
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-timex
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
 
   - name: stackforge/stacktach-winchester
     template:
       - name: merge-check
-      - name: noop-jobs
+    check:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+    gate:
+      - gate-stacktach-pep8
+      - gate-stacktach-python27
+
+  - name: stackforge/sticks
+    template:
+      - name: merge-check
+      - name: python-jobs
+
+  - name: stackforge/sticks-dashboard
+    template:
+      - name: merge-check
+      - name: python-jobs
 
   - name: stackforge/striker
     template:
@@ -6443,10 +7006,12 @@ projects:
       - gate-swift3-pylint
       - gate-swift3-tox-tempauth
       - gate-swift3-tox-keystone
+      - gate-swift3-tox-s3acl
     gate:
       - gate-swift3-pylint
       - gate-swift3-tox-tempauth
       - gate-swift3-tox-keystone
+      - gate-swift3-tox-s3acl
     post:
       - swift3-coverage
 
@@ -6507,6 +7072,16 @@ projects:
     gate:
       - gate-telcowg-usecases-python27
 
+  - name: stackforge/terracotta
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
+  - name: stackforge/third-party-ci-tools
+    template:
+      - name: merge-check
+      - name: noop-jobs
+
   - name: stackforge/tomograph
     template:
       - name: merge-check
@@ -6546,21 +7121,6 @@ projects:
       - gate-turbo-hipster-python27
     post:
       - turbo-hipster-coverage
-
-  - name: stackforge/tuskar-ui-extras
-    template:
-      - name: merge-check
-      - name: docs-on-rtfd
-    check:
-      - gate-tuskar-ui-extras-pep8
-      - gate-tuskar-ui-extras-python27
-      - gate-tuskar-ui-extras-selenium
-    gate:
-      - gate-tuskar-ui-extras-pep8
-      - gate-tuskar-ui-extras-python27
-      - gate-tuskar-ui-extras-selenium
-    post:
-      - tuskar-ui-extras-branch-tarball
 
   - name: stackforge/vmtp
     template:
@@ -6612,121 +7172,145 @@ projects:
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-animate
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-bootstrap
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-cookies
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-fileupload
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
-  - name: stackforge/xstatic-angular-irdragndrop
+  - name: stackforge/xstatic-angular-lrdragndrop
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-mock
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-sanitize
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-angular-smart-table
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-bootstrap-datepicker
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-bootstrap-scss
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-d3
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-font-awesome
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-hogan
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-jasmine
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-jquery-migrate
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-jquery.bootstrap.wizard
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-jquery.quicksearch
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-jquery.tablesorter
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-jsencrypt
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-magic-search
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-qunit
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-rickshaw
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/xstatic-spin
     template:
       - name: merge-check
       - name: noop-jobs
+      - name: publish-to-pypi
 
   - name: stackforge/yaql
     template:

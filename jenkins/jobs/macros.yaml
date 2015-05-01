@@ -1,7 +1,18 @@
 - builder:
     name: gerrit-git-prep
     builders:
-      - shell: "/usr/local/jenkins/slave_scripts/gerrit-git-prep.sh https://review.openstack.org git://git.openstack.org"
+      - shell: |
+          #!/bin/bash
+          count=0
+          until /usr/local/jenkins/slave_scripts/gerrit-git-prep.sh https://review.openstack.org git://git.openstack.org ; do
+              echo "git failed, retrying"
+              count=$(($count + 1))
+              if [ $count -eq 3 ]; then
+                  echo "Maximum of 3 git retries reached"
+                  exit 1
+              fi
+              sleep 5
+          done
 
 - builder:
     name: branch-git-prep
@@ -83,6 +94,21 @@
           sudo apt-get install -y nodejs nodejs-legacy npm
 
 - builder:
+    name: npm-run
+    builders:
+      - shell: |
+          export DISPLAY=:99
+          npm install
+          npm run {command}
+
+- builder:
+    name: xvfb-start
+    builders:
+      - shell: |
+          DIMENSIONS='1280x1024x24'
+          /usr/bin/Xvfb :99 -screen 0 ${DIMENSIONS} -ac +extension GLX +render -noreset 2>&1 > /dev/null &
+
+- builder:
     name: xvfb-install
     builders:
       - shell: |
@@ -102,6 +128,15 @@
       - shell: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser
+
+- builder:
+    name: diskimage-builder-install
+    builders:
+      - shell: |
+          sudo apt-get update
+          sudo apt-get install -y qemu kpartx
+          sudo pip install dib-utils
+          sudo pip install diskimage-builder
 
 - builder:
     name: uninstall-puppet
@@ -408,6 +443,84 @@
           ip neighbor show
 
 - builder:
+    name: base-packages-trusty
+    builders:
+      - shell: |
+          #!/bin/bash -xe
+          sudo apt-get update
+          sudo PATH=/usr/sbin:/sbin:$PATH DEBIAN_FRONTEND=noninteractive \
+              apt-get --option "Dpkg::Options::=--force-confold" --assume-yes \
+              install \
+                  build-essential \
+                  python-dev \
+                  mysql-client \
+                  mysql-server \
+                  libmysqlclient-dev \
+                  postgresql-client \
+                  postgresql \
+                  libpq-dev \
+                  libffi-dev \
+                  libxslt-dev \
+
+- builder:
+    name: mysql-prep
+    builders:
+      - shell: |
+          #!/bin/bash -xe
+          DB_ROOT_PW=insecure_slave
+          DB_USER=openstack_citest
+          DB_PW=openstack_citest
+          sudo -H mysqladmin -u root password $DB_ROOT_PW
+          sudo -H mysql -u root -p$DB_ROOT_PW -h 127.0.0.1 -e "
+              GRANT ALL PRIVILEGES ON *.*
+                  TO '$DB_USER'@'%' identified by '$DB_PW';"
+
+- builder:
+    name: pgsql-prep
+    builders:
+      - shell: |
+          #!/bin/bash -xe
+          DB_ROOT_PW=insecure_slave
+          DB_USER=openstack_citest
+          DB_PW=openstack_citest
+          root_roles=$(sudo -H -u postgres psql -t -c "
+              SELECT 'HERE' from pg_roles where rolname='$DB_USER'")
+          if [[ ${root_roles} == *HERE ]];then
+              sudo -H -u postgres psql -c "
+                  ALTER ROLE $DB_USER WITH SUPERUSER LOGIN PASSWORD '$DB_PW'"
+          else
+              sudo -H -u postgres psql -c "
+                  CREATE ROLE $DB_USER WITH SUPERUSER LOGIN PASSWORD '$DB_PW'"
+          fi
+          cat << EOF > $HOME/.pgpass
+          *:*:*:$DB_USER:$DB_PW
+          EOF
+          chmod 0600 $HOME/.pgpass
+
+- builder:
+    name: mysql-db
+    builders:
+      - shell: |
+          #!/bin/bash -xe
+          DB_USER=openstack_citest
+          DB_PW=openstack_citest
+          mysql -u $DB_USER -p$DB_PW -h 127.0.0.1 -e "
+              SET default_storage_engine=MYISAM;
+              DROP DATABASE IF EXISTS {db_name};
+              CREATE DATABASE {db_name} CHARACTER SET utf8;"
+
+- builder:
+    name: pgsql-db
+    builders:
+      - shell: |
+          #!/bin/bash -xe
+          DB_USER=openstack_citest
+          DB_PW=openstack_citest
+          psql -h 127.0.0.1 -U $DB_USER -d template1 -c "
+              DROP DATABASE IF EXISTS {db_name}"
+          createdb -h 127.0.0.1 -U $DB_USER -l C -T template0 -E utf8 {db_name}
+
+- builder:
     name: static-publish-prep
 
     # We want to publish to the docroot but the scp publisher cannot remove
@@ -467,6 +580,14 @@
       - shell: "/usr/local/jenkins/slave_scripts/grab_console_log.sh"
       - zuul-swift-upload-logs:
          upload_source: '{upload_source} /tmp/console.html'
+
+
+- builder:
+    name: print-node-uuid
+    builders:
+      - shell: |
+          #!/bin/sh
+          [ -f /etc/nodepool/uuid ] && echo "Node UUID: $(cat /etc/nodepool/uuid)"
 
 
 # ======================================================================
@@ -668,7 +789,6 @@
           onfailure: False
           onsuccess: False
 
-
 - publisher:
     name: zuul-swift-upload-logs-with-console
     publishers:
@@ -683,18 +803,20 @@
           onsuccess: False
 
 - publisher:
-    name: zuul-swift-devstack-logs
+    name: zuul-swift-devstack-logs-with-console
     publishers:
-      - zuul-swift-upload-logs:
-          upload_source: 'logs'
+      - postbuildscript:
+          builders:
+            - shell: |
+                #!/bin/bash -x
+                cp devstack-gate/help/tempest-logs.html logs/index_footer.html
+                mkdir zuul_swift_devstack_logs_extra
+                cp devstack-gate/help/tempest-overview.html zuul_swift_devstack_logs_extra/index_footer.html
+      - zuul-swift-upload-logs-with-console:
+          upload_source: 'logs zuul_swift_devstack_logs_extra/index_footer.html'
 
 - publisher:
-    name: os-ansible-logs
+    name: zuul-swift-test-results-with-console
     publishers:
-      - scp:
-          site: 'static.openstack.org'
-          files:
-            - target: 'logs/$LOG_PATH'
-              source: '/openstack/log/**'
-              keep-hierarchy: true
-              copy-after-failure: true
+      - zuul-swift-upload-logs-with-console:
+          upload_source: '"**/*nose_results.html" "**/*testr_results.html.gz" ".testrepository/tmp*" "**/*subunit_log.txt.gz" ".tox/*/log/*"'

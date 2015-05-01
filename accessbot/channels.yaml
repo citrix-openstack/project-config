@@ -51,6 +51,8 @@ global:
 
 # Individual channel configuration:
 channels:
+  - name: akanda
+  - name: cerberus-project
   - name: cloudkitty
   - name: congress
   - name: dox
@@ -61,6 +63,7 @@ channels:
   - name: git-upstream
     mask: full_mask
   - name: heat
+  - name: kolla
   - name: magnetodb
     mask: full_mask
   - name: murano
@@ -71,6 +74,7 @@ channels:
   - name: openstack-101
   - name: openstack-ansible
   - name: openstack-anvil
+  - name: openstack-api
   - name: openstack-bacon
   - name: openstack-barbican
   - name: openstack-blazar
@@ -81,6 +85,7 @@ channels:
   - name: openstack-cloudkeep
   - name: openstack-community
   - name: openstack-containers
+  - name: openstack-cue
   - name: openstack-dev
   - name: openstack-dns
   - name: openstack-doc
@@ -97,6 +102,7 @@ channels:
   - name: openstack-infra
   - name: openstack-ironic
   - name: openstack-keystone
+  - name: openstack-ko
   - name: openstack-lbaas
     mask: full_mask
   - name: openstack-manila
@@ -116,8 +122,10 @@ channels:
   - name: openstack-merges
   - name: openstack-merlin
   - name: openstack-metering
+  - name: openstack-mistral
   - name: openstack-monasca
   - name: openstack-neutron
+  - name: openstack-neutron-ovn
   - name: openstack-nfv
   - name: openstack-nova
   - name: openstack-operators
@@ -126,6 +134,7 @@ channels:
   - name: openstack-poppy
   - name: openstack-qa
   - name: openstack-raksha
+  - name: openstack-rally
   - name: openstack-rating
   - name: openstack-relmgr-office
   - name: openstack-sahara
@@ -137,12 +146,15 @@ channels:
   - name: openstack-stable
   - name: openstack-state-management
   - name: openstack-swift
+  - name: openstack-terracotta
   - name: openstack-translation
   - name: openstack-trove
   - name: openstack-zaqar
   - name: packstack-dev
   - name: pecanpy
+  - name: puppet-openstack
   - name: refstack
+  - name: senlin
   - name: solum
   - name: storyboard
   - name: striker-dev
@@ -155,3 +167,4 @@ channels:
   - name: tricircle
     mask: full_mask
   - name: tripleo
+  - name: wsme

@@ -31,6 +31,55 @@ fi
 echo $HOSTNAME > /tmp/image-hostname.txt
 sudo mv /tmp/image-hostname.txt /etc/image-hostname.txt
 
+LSBDISTID=$(lsb_release -is)
+LSBDISTCODENAME=$(lsb_release -cs)
+if [ "$LSBDISTID" == "Ubuntu" ] ; then
+sudo dd of=/etc/apt/sources.list <<EOF
+# See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
+# newer versions of the distribution.
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME main restricted
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME main restricted
+
+## Major bug fix updates produced after the final release of the
+## distribution.
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-updates main restricted
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-updates main restricted
+
+## N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
+## team. Also, please note that software in universe WILL NOT receive any
+## review or updates from the Ubuntu security team.
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME universe
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME universe
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-updates universe
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-updates universe
+
+## N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
+## team, and may not be under a free licence. Please satisfy yourself as to
+## your rights to use the software. Also, please note that software in
+## multiverse WILL NOT receive any review or updates from the Ubuntu
+## security team.
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME multiverse
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-updates multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-updates multiverse
+
+## N.B. software from this repository may not have been tested as
+## extensively as that contained in the main release, although it includes
+## newer versions of some applications which may provide useful features.
+## Also, please note that software in backports WILL NOT receive any review
+## or updates from the Ubuntu security team.
+deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-backports main restricted universe multiverse
+deb-src http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME-backports main restricted universe multiverse
+
+deb http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security main restricted
+deb-src http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security main restricted
+deb http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security universe
+deb-src http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security universe
+deb http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security multiverse
+deb-src http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security multiverse
+EOF
+fi
+
 # HP Cloud centos6 images currently require an update to the
 # certificates file before they can connect to common services such as
 # fedora mirror for EPEL over https
@@ -51,13 +100,6 @@ if [ -f /usr/bin/yum ]; then
 fi
 wget https://git.openstack.org/cgit/openstack-infra/system-config/plain/install_puppet.sh
 sudo bash -xe install_puppet.sh
-
-if [ "$THIN" = "false" ] ; then
-    # Workaround necessary until this pull request:
-    # https://github.com/puppetlabs/puppetlabs_spec_helper/pull/90
-    # is merged.
-    sudo gem install --version '~>2.99.0' rspec
-fi
 
 sudo git clone --depth=1 $GIT_BASE/openstack-infra/system-config.git \
     /root/system-config
@@ -121,6 +163,12 @@ echo 'nameserver 127.0.0.1' > /etc/resolv.conf
 exit 0
 EOF
 
+# Make all cloud-init data sources match rackspace- only attempt to look
+# at ConfigDrive, not at metadata service
+sudo dd of=/etc/cloud/cloud.cfg.d/95_real_datasources.cfg <<EOF
+datasource_list: [ ConfigDrive, None ]
+EOF
+
 sudo bash -c "echo 'include: /etc/unbound/forwarding.conf' >> /etc/unbound/unbound.conf"
 if [ -e /etc/init.d/unbound ] ; then
     sudo /etc/init.d/unbound restart
@@ -177,7 +225,8 @@ sudo rm -fr /tmp/zuul
 # This is in /usr instead of /usr/local due to this bug on precise:
 # https://bugs.launchpad.net/ubuntu/+source/python2.7/+bug/839588
 sudo -H virtualenv /usr/zuul-swift-logs-env
-sudo -H /usr/zuul-swift-logs-env/bin/pip install python-magic argparse requests
+sudo -H /usr/zuul-swift-logs-env/bin/pip install python-magic argparse \
+    requests glob2
 
 sync
 sleep 5
