@@ -31,10 +31,24 @@ fi
 echo $HOSTNAME > /tmp/image-hostname.txt
 sudo mv /tmp/image-hostname.txt /etc/image-hostname.txt
 
-LSBDISTID=$(lsb_release -is)
-LSBDISTCODENAME=$(lsb_release -cs)
-if [ "$LSBDISTID" == "Ubuntu" ] ; then
-sudo dd of=/etc/apt/sources.list <<EOF
+# HP Cloud centos6 images currently require an update to the
+# certificates file before they can connect to common services such as
+# fedora mirror for EPEL over https
+if [ -f /etc/redhat-release ]; then
+    if grep -q 'CentOS release 6' /etc/redhat-release; then
+        # chicken-and-egg ... hp cloud image has EPEL installed, but
+        # we can't connect to it...
+        # Note 'epel*' will match 0 or more repositories named epel,
+        # so it will work regardless of whether epel is actually
+        # installed.
+        sudo yum --disablerepo=epel* update -y ca-certificates
+    fi
+else
+    # Cloud provider apt repos break us - so stop using them
+    LSBDISTID=$(lsb_release -is)
+    LSBDISTCODENAME=$(lsb_release -cs)
+    if [ "$LSBDISTID" == "Ubuntu" ] ; then
+    sudo dd of=/etc/apt/sources.list <<EOF
 # See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
 # newer versions of the distribution.
 deb http://us.archive.ubuntu.com/ubuntu/ $LSBDISTCODENAME main restricted
@@ -78,19 +92,6 @@ deb-src http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security universe
 deb http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security multiverse
 deb-src http://security.ubuntu.com/ubuntu $LSBDISTCODENAME-security multiverse
 EOF
-fi
-
-# HP Cloud centos6 images currently require an update to the
-# certificates file before they can connect to common services such as
-# fedora mirror for EPEL over https
-if [ -f /etc/redhat-release ]; then
-    if grep -q 'CentOS release 6' /etc/redhat-release; then
-        # chicken-and-egg ... hp cloud image has EPEL installed, but
-        # we can't connect to it...
-        # Note 'epel*' will match 0 or more repositories named epel,
-        # so it will work regardless of whether epel is actually
-        # installed.
-        sudo yum --disablerepo=epel* update -y ca-certificates
     fi
 fi
 
@@ -164,10 +165,13 @@ exit 0
 EOF
 
 # Make all cloud-init data sources match rackspace- only attempt to look
-# at ConfigDrive, not at metadata service
+# at ConfigDrive, not at metadata service. This is not needed if there
+# is no cloud-init
+if [ -d /etc/cloud/cloud.cfg.d ] ; then
 sudo dd of=/etc/cloud/cloud.cfg.d/95_real_datasources.cfg <<EOF
 datasource_list: [ ConfigDrive, None ]
 EOF
+fi
 
 sudo bash -c "echo 'include: /etc/unbound/forwarding.conf' >> /etc/unbound/unbound.conf"
 if [ -e /etc/init.d/unbound ] ; then

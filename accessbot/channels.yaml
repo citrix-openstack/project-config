@@ -83,9 +83,12 @@ channels:
   - name: openstack-chef
   - name: openstack-cinder
   - name: openstack-cloudkeep
+  - name: openstack-cloudpulse
+  - name: openstack-cognitive
   - name: openstack-community
   - name: openstack-containers
   - name: openstack-cue
+  - name: openstack-defcore
   - name: openstack-dev
   - name: openstack-dns
   - name: openstack-doc
@@ -100,6 +103,7 @@ channels:
   - name: openstack-horizon
   - name: openstack-hyper-v
   - name: openstack-infra
+  - name: openstack-infra-incident
   - name: openstack-ironic
   - name: openstack-keystone
   - name: openstack-ko

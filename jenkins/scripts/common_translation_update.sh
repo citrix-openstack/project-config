@@ -14,6 +14,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+# Used for setup.py babel commands
+QUIET="--quiet"
+
 # Initial transifex setup
 function setup_translation {
     # Track in HAS_CONFIG whether we run "tx init" since calling it
@@ -228,6 +231,8 @@ function send_patch {
     if [ $HAS_CONFIG -eq 1 ]; then
         git reset -q .tx/config
         git checkout -- .tx/config
+    else
+        rm -rf .tx
     fi
 
     # Don't send a review if nothing has changed.
@@ -281,9 +286,9 @@ function extract_messages_log {
     project=$1
 
     # Update the .pot files
-    python setup.py extract_messages
+    python setup.py $QUIET extract_messages
     for level in $LEVELS ; do
-        python setup.py extract_messages --no-default-keywords \
+        python setup.py $QUIET extract_messages --no-default-keywords \
             --keyword ${LKEYWORD[$level]} \
             --output-file ${project}/locale/${project}-log-${level}.pot
     done
@@ -314,18 +319,25 @@ function filter_commits {
     # comment lines, or diff file information.
     # Also, don't send files if only .pot files would be changed.
     PO_CHANGE=0
-    for f in `git diff --cached --name-only`; do
+    # Don't iterate over deleted files
+    for f in `git diff --cached --name-only --diff-filter=AM`; do
         # It's ok if the grep fails
         set +e
         changed=$(git diff --cached "$f" \
             | egrep -v "(POT-Creation-Date|Project-Id-Version|PO-Revision-Date)" \
             | egrep -c "^([-+][^-+#])")
+        added=$(git diff --cached "$f" \
+            | egrep -v "(POT-Creation-Date|Project-Id-Version|PO-Revision-Date)" \
+            | egrep -c "^([+][^+#])")
         set -e
         if [ $changed -eq 0 ]; then
             git reset -q "$f"
             git checkout -- "$f"
-        # Check for all files endig with ".po"
-        elif [[ $f =~ .po$ ]] ; then
+        # Check for all files endig with ".po".
+        # We will take this import if at least one change adds new content,
+        # thus adding a new translation.
+        # If only lines are removed, we do not need this.
+        elif [[ $added -gt 0 && $f =~ .po$ ]] ; then
             PO_CHANGE=1
         fi
     done
@@ -404,6 +416,24 @@ function compress_manual_po_files {
             if [[ $i =~ "/glossary/" ]] ; then
                 continue
             fi
+        fi
+        msgattrib --translated --no-location "$i" --output="${i}.tmp"
+        mv "${i}.tmp" "$i"
+    done
+}
+
+# Reduce size of po files. This reduces the amount of content imported
+# and makes for fewer imports.
+# Some projects have no pot files (see function compress_po_files) but
+# use the English po file as source. For these projects we should not
+# touch the English po file. This way we can reconstruct the po files
+# using "msgmerge EnglishPOTFILE POFILE -o COMPLETEPOFILE".
+function compress_non_en_po_files {
+    local directory=$1
+
+    for i in `find $directory -name *.po `; do
+        if [[ $i =~ "/locale/en/LC_MESSAGES/" ]] ; then
+            continue
         fi
         msgattrib --translated --no-location "$i" --output="${i}.tmp"
         mv "${i}.tmp" "$i"

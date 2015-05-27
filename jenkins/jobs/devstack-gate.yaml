@@ -566,7 +566,7 @@
           export DEVSTACK_GATE_TIMEOUT=120
           export DEVSTACK_GATE_TEMPEST=1
           export DEVSTACK_GATE_TEMPEST_FULL=1
-          export DEVSTACK_GATE_NOVA_REPLACE_V2_ENDPOINT_WITH_V21_API=1
+          export DEVSTACK_LOCAL_CONFIG="NOVA_API_VERSION=v21default"
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
@@ -600,6 +600,7 @@
           export DEVSTACK_GATE_TIMEOUT=60
           export DEVSTACK_GATE_TROVE=1
           export DEVSTACK_GATE_HEAT=1
+          export DEVSTACK_GATE_SAHARA=1
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
@@ -639,7 +640,7 @@
           export DEVSTACK_GATE_TEMPEST=1
           export DEVSTACK_GATE_TEMPEST_FULL=1
           export DEVSTACK_GATE_NEUTRON=1
-          export DEVSTACK_GATE_NOVA_REPLACE_V2_ENDPOINT_WITH_V21_API=1
+          export DEVSTACK_LOCAL_CONFIG="NOVA_API_VERSION=v21default"
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
@@ -1249,7 +1250,7 @@
           export DEVSTACK_GATE_TEMPEST_FULL=1
           export DEVSTACK_GATE_POSTGRES=1
           export DEVSTACK_GATE_CONFIGDRIVE=0
-          export DEVSTACK_GATE_ENABLE_HTTPD_MOD_WSGI_SERVICES=0
+          export DEVSTACK_LOCAL_CONFIG="ENABLE_HTTPD_MOD_WSGI_SERVICES=False"
           export DEVSTACK_GATE_NOVA_API_METADATA_SPLIT=1
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
@@ -1282,7 +1283,7 @@
           export DEVSTACK_GATE_TIMEOUT=180
           export DEVSTACK_GATE_TEMPEST=1
           export DEVSTACK_GATE_TEMPEST_FULL=1
-          export DEVSTACK_GATE_KEYSTONE_V3=1
+          export DEVSTACK_LOCAL_CONFIG="TEMPEST_AUTH_VERSION=v3"
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
@@ -1315,7 +1316,7 @@
           export DEVSTACK_GATE_TEMPEST=1
           export DEVSTACK_GATE_TEMPEST_FULL=1
           export DEVSTACK_GATE_NEUTRON=1
-          export DEVSTACK_GATE_KEYSTONE_V3=1
+          export DEVSTACK_LOCAL_CONFIG="TEMPEST_AUTH_VERSION=v3"
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
@@ -1739,7 +1740,7 @@
           export DEVSTACK_GATE_NEUTRON=1
           export DEVSTACK_GATE_TEMPEST_STRESS=1
           export DEVSTACK_GATE_TEMPEST_STRESS_ARGS="-d 3600 -S -s -t tempest/stress/etc/stress-tox-job.json"
-          export DEVSTACK_GATE_KEYSTONE_V3=1
+          export DEVSTACK_LOCAL_CONFIG="TEMPEST_AUTH_VERSION=v3"
           export BRANCH_OVERRIDE={branch-override}
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
@@ -1941,6 +1942,41 @@
 
 
 - job-template:
+    name: '{pipeline}-tempest-dsvm-full-glusterfs{branch-designator}'
+    node: '{node}'
+
+    wrappers:
+      - build-timeout:
+          timeout: 125
+      - timestamps
+
+    builders:
+      - link-logs
+      - net-info
+      - devstack-checkout
+      - shell: |
+          #!/bin/bash -xe
+          export PYTHONUNBUFFERED=true
+          export DEVSTACK_GATE_TIMEOUT=120
+          export DEVSTACK_GATE_TEMPEST=1
+          export PROJECTS="stackforge/devstack-plugin-glusterfs $PROJECTS"
+          export DEVSTACK_LOCAL_CONFIG="enable_plugin devstack-plugin-glusterfs git://git.openstack.org/stackforge/devstack-plugin-glusterfs"
+
+          # Skip test_volume_boot_pattern test cases for GlusterFS until bug 1444806 is fixed.
+          # Below regex also exclude the slow tag.
+          # '557cd2c2-4eb8-4dce-98be-f86765ff311' is the idempotent id of 'test_volume_boot_pattern' test case.
+          r="^(?!(.*\[.*slow.*\])|(.*\[.*557cd2c2-4eb8-4dce-98be-f86765ff311.*\])).*$"
+          export DEVSTACK_GATE_TEMPEST_REGEX="$r"
+
+          cp devstack-gate/devstack-vm-gate-wrap.sh ./safe-devstack-vm-gate-wrap.sh
+          ./safe-devstack-vm-gate-wrap.sh
+
+    publishers:
+      - devstack-logs
+      - console-log
+
+
+- job-template:
     name: '{pipeline}-tempest-dsvm-trove{branch-designator}'
     node: '{node}'
 
@@ -2043,6 +2079,5 @@
       - '{pipeline}-tempest-dsvm-full-ceph{branch-designator}'
       - '{pipeline}-tempest-dsvm-nova-v21-full{branch-designator}'
       - '{pipeline}-tempest-dsvm-nova-v21-neutron-full{branch-designator}'
-      - '{pipeline}-tempest-dsvm-full-glusterfs{branch-designator}'
       - '{pipeline}-tempest-dsvm-trove{branch-designator}'
       - '{pipeline}-grenade-dsvm-trove{branch-designator}'

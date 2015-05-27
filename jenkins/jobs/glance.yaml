@@ -1,10 +1,10 @@
 - job-template:
-    name: '{pipeline}-zaqarclient-dsvm-functional{branch-designator}'
+    name: '{pipeline}-glanceclient-dsvm-functional{branch-designator}'
     node: '{node}'
 
     wrappers:
       - build-timeout:
-          timeout: 95
+          timeout: 65
       - timestamps
 
     builders:
@@ -14,27 +14,19 @@
       - shell: |
           #!/bin/bash -xe
           export PYTHONUNBUFFERED=true
-          export FUNCTEST_TIMEOUT=30
-          export DEVSTACK_GATE_ZAQAR=1
-          export DEVSTACK_GATE_TEMPEST=0
-          export DEVSTACK_GATE_TIMEOUT=90
-          export DEVSTACK_GATE_EXERCISES=0
-          export DEVSTACK_GATE_INSTALL_TESTONLY=1
-          export ENABLED_SERVICES=mysql,key,tempest
-          export DEVSTACK_LOCAL_CONFIG="enable_plugin zaqar git://git.openstack.org/openstack/zaqar"
+          export DEVSTACK_GATE_TIMEOUT=60
           export BRANCH_OVERRIDE={branch-override}
-
+          export DEVSTACK_PROJECT_FROM_GIT=python-glanceclient
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
           fi
 
-          export ZAQARCLIENT_TEST_FUNCTIONAL=1
           function post_test_hook {{
-              cd /opt/stack/new/python-zaqarclient
-              nosetests tests.functional
+              # Configure and run functional tests
+              $BASE/new/python-glanceclient/glanceclient/tests/functional/hooks/post_test_hook.sh
           }}
-
           export -f post_test_hook
+
           cp devstack-gate/devstack-vm-gate-wrap.sh ./safe-devstack-vm-gate-wrap.sh
           ./safe-devstack-vm-gate-wrap.sh
 
@@ -43,14 +35,13 @@
       - devstack-logs
       - console-log
 
-
 - job-template:
-    name: '{pipeline}-tempest-dsvm-{backend}-zaqar{branch-designator}'
+    name: '{pipeline}-glance_store-dsvm-functional-{driver}'
     node: '{node}'
 
     wrappers:
       - build-timeout:
-          timeout: 125
+          timeout: 65
       - timestamps
 
     builders:
@@ -60,23 +51,22 @@
       - shell: |
           #!/bin/bash -xe
           export PYTHONUNBUFFERED=true
-          export DEVSTACK_GATE_TIMEOUT=120
+          export DEVSTACK_GATE_TIMEOUT=60
           export BRANCH_OVERRIDE={branch-override}
-          export DEVSTACK_LOCAL_CONFIG="enable_plugin zaqar git://git.openstack.org/openstack/zaqar"
-
+          export DEVSTACK_PROJECT_FROM_GIT=glance_store
           if [ "$BRANCH_OVERRIDE" != "default" ] ; then
               export OVERRIDE_ZUUL_BRANCH=$BRANCH_OVERRIDE
           fi
 
           function gate_hook {{
-              cd /opt/stack/new/zaqar/devstack/gate
-              ./gate_hook.sh {backend}
+              cd $BASE/new/glance_store/glance_store/tests/functional/gate
+              ./gate_hook.sh {driver}
           }}
           export -f gate_hook
 
           function post_test_hook {{
-              cd /opt/stack/new/zaqar/devstack/gate
-              ./post_test_hook.sh {backend}
+              cd $BASE/new/glance_store/glance_store/tests/functional/gate
+              ./post_test_hook.sh {driver}
           }}
           export -f post_test_hook
 

@@ -725,6 +725,7 @@
   options:
     - direct-release
   description: OpenStack API site
+  acl-config: /home/gerrit2/acls/openstack/openstack-manuals.config
 - project: openstack/api-wg
   description: API Working Group
   homepage: https://wiki.openstack.org/wiki/API_Working_Group
@@ -733,6 +734,10 @@
     and management of secrets, including in OpenStack environments.
 - project: openstack/barbican-specs
   description: Blueprints for the barbican project
+- project: openstack/bifrost
+  description: Ansible roles and playbooks to enable a standalone Ironic install
+  groups:
+    - ironic
 - project: openstack/castellan
   description: Generic Key Manager interface for OpenStack
 - project: openstack/ceilometer
@@ -780,6 +785,11 @@
   description: Pieces of diskimage-builder that are useful without the full project
 - project: openstack/diskimage-builder
   description: Image building tools for OpenStack
+- project: openstack/django-openstack-auth-kerberos
+  description: Kerberos support for django-openstack-auth
+  acl-config: /home/gerrit2/acls/openstack/django_openstack_auth.config
+  groups:
+    - django-openstack-auth
 - project: openstack/django_openstack_auth
   groups:
     - django-openstack-auth
@@ -1245,18 +1255,32 @@
   description: The router appliance for Akanda
   homepage: http://akanda.io
   acl-config: /home/gerrit2/acls/stackforge/akanda.config
+  groups:
+    - akanda
 - project: stackforge/akanda-appliance-builder
   description: akanda appliance build scripts
   homepage: http://akanda.io
   acl-config: /home/gerrit2/acls/stackforge/akanda.config
+  groups:
+    - akanda
+- project: stackforge/akanda-horizon
+  description: akanda rug horizon extension
+  homepage: http://akanda.io
+  acl-config: /home/gerrit2/acls/stackforge/akanda.config
+  groups:
+    - akanda
 - project: stackforge/akanda-neutron
   description: Neutron API extensions for Akanda
   homepage: http://akanda.io
   acl-config: /home/gerrit2/acls/stackforge/akanda.config
+  groups:
+    - akanda
 - project: stackforge/akanda-rug
   description: It ties the room together
   homepage: http://akanda.io
   acl-config: /home/gerrit2/acls/stackforge/akanda.config
+  groups:
+    - akanda
 - project: stackforge/anchor
   description: An Ephemeral PKI system that can act as a trust anchor for OpenStack
     PKI operations
@@ -1269,6 +1293,9 @@
   description: An OpenStack client library for Ruby
 - project: stackforge/bandit
   description: Python AST-based static analyzer from OpenStack Security Group
+- project: stackforge/bansho
+  description: Web interface for Surveil
+  acl-config: /home/gerrit2/acls/stackforge/surveil.config
 - project: stackforge/billingstack
   description: Billing software
 - project: stackforge/blazar
@@ -1308,6 +1335,8 @@
 - project: stackforge/cloudkitty-dashboard
   description: CloudKitty Horizon Plugin
   acl-config: /home/gerrit2/acls/stackforge/cloudkitty.config
+- project: stackforge/cloudpulse
+  description: A Health-Checking service for OpenStack deployments.
 - project: stackforge/cloudroast
   description: Automated Test Case Repository for OpenStack. Based on CloudCAFE.
 - project: stackforge/cloudv-ostf-adapter
@@ -1320,6 +1349,8 @@
   acl-config: /home/gerrit2/acls/stackforge/cloudv.config
   groups:
     - cloudv
+- project: stackforge/cognitive
+  description: Machine Learning as a Service
 - project: stackforge/compass-adapters
   groups:
     - compass
@@ -1678,6 +1709,12 @@
     - fuel
   description: Fuel plugin for nfs as storage backend for ephemeral volumes (nova)
   docimpact-group: fuel
+- project: stackforge/fuel-plugin-tls
+  groups:
+    - fuel
+  description: Fuel plugin to secure openstack using the Transport Layer Security
+    (TLS) protocol
+  docimpact-group: fuel
 - project: stackforge/fuel-plugins
   groups:
     - fuel
@@ -1858,6 +1895,8 @@
   description: Nerd Reviewer bot reviews patches and checks that they pass common
     project rules e.g. unit test coverage, max amount of loc, well written commit
     message... So core reviews can concentrate on other more important stuff.
+- project: stackforge/networking-6wind
+  description: Neutron support for fast path stack
 - project: stackforge/networking-arista
   description: Arista drivers for ML2 and L3 Service Plugin
 - project: stackforge/networking-bagpipe-l2
@@ -2083,6 +2122,9 @@
 - project: stackforge/puppet-setproxy
   description: Generic Set proxy Module
   acl-config: /home/gerrit2/acls/stackforge/gozer.config
+- project: stackforge/puppet-surveil
+  description: Puppet Surveil Module
+  acl-config: /home/gerrit2/acls/stackforge/surveil.config
 - project: stackforge/puppet-swift
   description: OpenStack Swift Puppet Module
   acl-config: /home/gerrit2/acls/stackforge/puppet-modules.config
@@ -2117,6 +2159,12 @@
 - project: stackforge/python-cloudkittyclient
   description: Python client library for CloudKitty API
   acl-config: /home/gerrit2/acls/stackforge/cloudkitty.config
+- project: stackforge/python-cloudpulseclient
+  description: Python client library for CloudPulse
+  acl-config: /home/gerrit2/acls/stackforge/cloudpulse.config
+- project: stackforge/python-cognitiveclient
+  description: Python client library for Cognitive
+  acl-config: /home/gerrit2/acls/stackforge/cognitive.config
 - project: stackforge/python-cueclient
   description: Python client for mq provisioning service
   acl-config: /home/gerrit2/acls/stackforge/cue.config
@@ -2168,6 +2216,7 @@
   acl-config: /home/gerrit2/acls/stackforge/cerberus.config
 - project: stackforge/python-surveilclient
   description: Client library for surveil API.
+  acl-config: /home/gerrit2/acls/stackforge/surveil.config
 - project: stackforge/python-tackerclient
   description: Client library for tacker API.
   groups:
@@ -2270,6 +2319,7 @@
   description: Monitoring as a Service for OpenStack
 - project: stackforge/surveil-specs
   description: Blueprints for Surveil
+  acl-config: /home/gerrit2/acls/stackforge/surveil.config
 - project: stackforge/swift-ceph-backend
   description: Ceph backend for Swift
 - project: stackforge/swift3
@@ -2322,6 +2372,9 @@
   description: A set of Neutron drivers for the VMware NSX.
 - project: stackforge/warm
   description: Provides the ability to deploy OpenStack resources from Yaml templates.
+- project: stackforge/watcher
+  description: Watcher takes advantage of CEP and ML algorithms/metaheuristics to
+    improve physical resources usage through better VM placement.
 - project: stackforge/windows-diskimage-builder
   description: Disk image builder for windows systems.
   acl-config: /home/gerrit2/acls/openstack/diskimage-builder.config

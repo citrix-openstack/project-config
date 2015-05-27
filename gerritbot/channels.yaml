@@ -8,6 +8,7 @@ akanda:
       - stackforge/akanda
       - stackforge/akanda-appliance
       - stackforge/akanda-appliance-builder
+      - stackforge/akanda-horizon
       - stackforge/akanda-neutron
       - stackforge/akanda-rug
     branches:
@@ -101,6 +102,7 @@ fuel-tracker:
       - stackforge/fuel-plugin-neutron-lbaas
       - stackforge/fuel-plugin-neutron-vpnaas
       - stackforge/fuel-plugin-nova-nfs
+      - stackforge/fuel-plugin-tls
       - stackforge/fuel-qa
       - stackforge/fuel-tasklib
       - stackforge/python-fuelclient
@@ -141,6 +143,9 @@ kolla:
       - stackforge/kolla
     branches:
       - master
+      - stable/kilo
+      - stable/juno
+      - stable/icehouse
 
 magnetodb:
     events:
@@ -298,6 +303,28 @@ openstack-cinder:
     branches:
       - master
 
+openstack-cloudpulse:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/cloudpulse
+      - stackforge/python-cloudpulseclient
+    branches:
+      - master
+
+openstack-cognitive:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/cognitive
+      - stackforge/python-cognitiveclient
+    branches:
+      - master
+
 openstack-containers:
     events:
       - patchset-created
@@ -309,6 +336,7 @@ openstack-containers:
       - stackforge/heat-coe-templates
     branches:
       - master
+      - stable/kilo
 
 openstack-cue:
     events:
@@ -319,6 +347,16 @@ openstack-cue:
       - stackforge/cue
       - stackforge/python-cueclient
       - stackforge/cue-dashboard
+    branches:
+      - master
+
+openstack-defcore:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - openstack/defcore
     branches:
       - master
 
@@ -400,6 +438,7 @@ openstack-horizon:
       - x-vrif-minus-2
     projects:
       - openstack/horizon
+      - openstack/django-openstack-auth-kerberos
       - openstack/django_openstack_auth
       - openstack/tuskar-ui
       - openstack/manila-ui
@@ -581,7 +620,7 @@ openstack-infra:
       - debian/sid #zuul-packaging repo
       - feature/development #askbot-theme repo
       - feature/openid #openstackid repo
-      - openstack/2.8.4 #gerrit repo
+      - openstack/2.10.2 #gerrit repo
       - results #gitdm repo
       - stable/icehouse #requirements repo
       - stable/juno #requirements repo
@@ -608,6 +647,7 @@ openstack-ironic:
       - openstack/ironic-lib
       - openstack/ironic-specs
       - openstack/ironic-python-agent
+      - openstack/bifrost
       - openstack/python-ironicclient
       - openstack/coreos-image-builder
       - stackforge/pyghmi
@@ -653,6 +693,7 @@ openstack-manila:
       - x-vrif-minus-2
     projects:
       - openstack/manila
+      - openstack/manila-ui
       - openstack/python-manilaclient
       - stackforge/puppet-manila
     branches:
@@ -922,6 +963,16 @@ openstack-neutron-ovn:
     branches:
       - master
 
+openstack-nfv:
+    events:
+      - patchset-created
+      - change-merged
+      - x-vrif-minus-2
+    projects:
+      - stackforge/telcowg-usecases
+    branches:
+      - master
+
 openstack-nova:
     events:
       - patchset-created
@@ -966,7 +1017,6 @@ openstack-oslo:
       - openstack/taskflow
       - openstack/tooz
       - openstack-dev/cookiecutter
-      - openstack-dev/hacking
       - openstack-dev/oslo-cookiecutter
       - openstack-dev/pbr
     branches:
@@ -1001,6 +1051,9 @@ openstack-qa:
       - openstack-infra/subunit2sql
     branches:
       - master
+      - stable/kilo
+      - stable/juno
+      - stable/icehouse
 
 openstack-rally:
     events:
@@ -1262,6 +1315,8 @@ surveil:
       - stackforge/surveil
       - stackforge/python-surveilclient
       - stackforge/surveil-specs
+      - stackforge/bansho
+      - stackforge/puppet-surveil
     branches:
       - master
 
