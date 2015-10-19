@@ -100,7 +100,19 @@ if [ -f /usr/bin/yum ]; then
     sudo yum -y install wget
 fi
 wget https://git.openstack.org/cgit/openstack-infra/system-config/plain/install_puppet.sh
+# workaround:
+# As there is lib files upgraded for upstart when running install_puppet.sh,
+# it will restart upstart/init; but there is prolem with the restart and it
+# will cause install_puppet.sh hanging when it tries to restart some upstart
+# services e.g. "restart ssh". See Ubuntu bug# "bug/1492691" for details.
+# This workaround is to cheat the package upgrade to be under chroot env so
+# that it won't restart upstart/init.
+sudo cp -p /usr/bin/ischroot /usr/bin/ischroot.bak
+sudo sh -c 'echo "exit 0" > /usr/bin/ischroot'
 sudo bash -xe install_puppet.sh
+sudo cp -p /usr/bin/ischroot.bak /usr/bin/ischroot
+# end of workaround
+#sudo bash -xe install_puppet.sh
 
 sudo git clone --depth=1 $GIT_BASE/openstack-infra/system-config.git \
     /root/system-config
